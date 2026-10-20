@@ -931,7 +931,7 @@ class Program
         Console.WriteLine($"√2 por Newton-Raphson ≈ {raiz2:F12} ({it} iterações)");
 
         var rnd = new Random(42);
-        int dentro = 0, total = 2_000_000;
+        int dentro = 0, total = 400_000;
         for (int i = 0; i < total; i++)
         {
             double x = rnd.NextDouble(), y = rnd.NextDouble();
