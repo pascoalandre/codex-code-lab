@@ -1,6 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { classifyStatus, parseDiagnostics, prepareSource, type Diagnostic, type RunStatus } from "./csharp";
+import {
+  classifyStatus,
+  parseDiagnostics,
+  prepareSource,
+  toCompilerSource,
+  type Diagnostic,
+  type RunStatus,
+} from "./csharp";
 
 const RunInput = z.object({
   code: z.string().min(1, "O código está vazio").max(100_000, "Código demasiado grande (máx. 100 KB)"),
@@ -64,7 +71,7 @@ export const runCSharp = createServerFn({ method: "POST" })
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           language_id: 51,
-          source_code: toBase64(prepared.source),
+          source_code: toBase64(toCompilerSource(prepared.source)),
           stdin: toBase64(data.stdin),
           compiler_options: "-r:System.Numerics.dll",
           cpu_time_limit: 6,

@@ -273,3 +273,77 @@ export const STATUS_LABEL: Record<RunStatus, string> = {
   timeout: "Tempo limite excedido",
   "internal-error": "Falha no servidor de execução",
 };
+
+const NUMBER_AT = /^(?:0[xXbB][0-9a-fA-F_]+|[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9_]+)?)/;
+
+/**
+ * Mono's compiler mis-reads digit separators (1_000 → wrong value), so they are
+ * removed from numeric literals. Strings and comments are left untouched.
+ */
+export function stripDigitSeparators(src: string): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i];
+    const nx = src[i + 1];
+    if (c === "/" && nx === "/") {
+      const e = src.indexOf("\n", i);
+      const end = e === -1 ? n : e;
+      out += src.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (c === "/" && nx === "*") {
+      const e = src.indexOf("*/", i + 2);
+      const end = e === -1 ? n : e + 2;
+      out += src.slice(i, end);
+      i = end;
+      continue;
+    }
+    const verbatim =
+      (c === "@" && nx === '"') ||
+      ((c === "$" || c === "@") && (nx === "@" || nx === "$") && src[i + 2] === '"');
+    if (verbatim) {
+      let j = src.indexOf('"', i) + 1;
+      while (j < n) {
+        if (src[j] === '"') {
+          if (src[j + 1] === '"') {
+            j += 2;
+            continue;
+          }
+          j++;
+          break;
+        }
+        j++;
+      }
+      out += src.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
+      out += src.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    if (c >= "0" && c <= "9" && !/[\w]/.test(src[i - 1] ?? "")) {
+      const m = src.slice(i, i + 64).match(NUMBER_AT);
+      if (m) {
+        out += m[0].replace(/_/g, "");
+        i += m[0].length;
+        continue;
+      }
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/** Final transformation applied right before sending source to the compiler. */
+export function toCompilerSource(prepared: string): string {
+  // A UTF-8 BOM makes Mono read emoji and other non-BMP characters correctly.
+  return "\uFEFF" + stripDigitSeparators(prepared);
+}

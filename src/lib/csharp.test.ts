@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { classifyStatus, needsInput, parseDiagnostics, prepareSource } from "./csharp";
+import {
+  classifyStatus,
+  needsInput,
+  parseDiagnostics,
+  prepareSource,
+  stripDigitSeparators,
+  toCompilerSource,
+} from "./csharp";
 
 describe("prepareSource", () => {
   it("leaves classic programs with Main untouched", () => {
@@ -77,5 +84,18 @@ describe("classifyStatus", () => {
     expect(classifyStatus(6)).toBe("compile-error");
     expect(classifyStatus(5)).toBe("timeout");
     expect(classifyStatus(11)).toBe("runtime-error");
+  });
+});
+
+describe("toCompilerSource", () => {
+  it("removes digit separators from numbers but not from strings", () => {
+    const out = stripDigitSeparators('long a = 9_000_000L; var s = "1_000"; // 2_000');
+    expect(out).toBe('long a = 9000000L; var s = "1_000"; // 2_000');
+  });
+  it("keeps identifiers that contain underscores", () => {
+    expect(stripDigitSeparators("int x1_2 = 3_0;")).toBe("int x1_2 = 30;");
+  });
+  it("prefixes a byte order mark so emoji compile", () => {
+    expect(toCompilerSource("x").charCodeAt(0)).toBe(0xfeff);
   });
 });
