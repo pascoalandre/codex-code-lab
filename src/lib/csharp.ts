@@ -17,17 +17,16 @@ const NAMESPACE_RE = /^\s*namespace\s+[\w.]+/m;
 const TYPE_DECL_RE =
   /^\s*(?:\[[^\]]*\]\s*)?(?:(?:public|internal|private|protected|static|abstract|sealed|partial|readonly)\s+)*(?:class|struct|interface|enum)\s+\w/;
 const USING_DIRECTIVE_RE = /^using\s+(?:static\s+)?([\w.]+)\s*;/;
-const STATIC_LOCAL_FN_RE = /^(\s*)static\s+(?=[\w<>[\],.?]+\s+\w+\s*\()/;
-
-export const WRAPPER_HEADER =
-  "public static class __CodexProgram { public static void Main(string[] args) { ";
-const WRAPPER_CLOSE = "} } ";
+const FN_DECL_RE =
+  /^\s*(?:static\s+)?(?:async\s+)?(?!(?:return|new|await|throw|else|var|using|yield|goto|case|const|if|while|for|foreach|switch|lock)\b)[A-Za-z_][\w.]*(?:\s*<[^>()]*>)?(?:\[\s*,*\s*\])*\??\s+[A-Za-z_]\w*\s*\(/;
 
 export interface PreparedSource {
   source: string;
   /** True when top-level statements were wrapped into a generated Main. */
   wrapped: boolean;
-  /** 1-based line -> number of characters inserted at the start of that line. */
+  /** Generated line (1-based) -> original line (1-based). Empty when not wrapped. */
+  lineMap: number[];
+  /** Generated line (1-based) -> number of characters inserted at its start. */
   columnShift: Record<number, number>;
   /** Number of lines in the original code. */
   lineCount: number;
@@ -52,10 +51,20 @@ function braceDelta(line: string): number {
   return d;
 }
 
+function isFunctionDecl(line: string): boolean {
+  if (!FN_DECL_RE.test(line)) return false;
+  const clean = stripLiteralsAndComments(line).trim();
+  // A declaration has no assignment before its parameter list.
+  const paren = clean.indexOf("(");
+  if (clean.slice(0, paren).includes("=")) return false;
+  return clean.includes("=>") || clean.endsWith("{") || clean.endsWith(")");
+}
+
 /**
  * Accepts either a classic program (with Main) or modern top-level statements.
- * Top-level statements are wrapped into a generated Main while preserving line
- * numbers, so compiler diagnostics still point to the user's lines.
+ * Top-level statements go into a generated Main, top-level functions become
+ * static methods and types stay at file level. A line map keeps compiler
+ * diagnostics pointing at the user's original lines.
  */
 export function prepareSource(code: string): PreparedSource {
   const normalized = code.replace(/\r\n?/g, "\n");
@@ -63,7 +72,7 @@ export function prepareSource(code: string): PreparedSource {
   const lineCount = lines.length;
 
   if (MAIN_RE.test(normalized) || NAMESPACE_RE.test(normalized)) {
-    return { source: normalized, wrapped: false, columnShift: {}, lineCount };
+    return { source: normalized, wrapped: false, lineMap: [], columnShift: {}, lineCount };
   }
 
   const existing = new Set<string>();
@@ -94,61 +103,68 @@ export function prepareSource(code: string): PreparedSource {
     break;
   }
 
-  // Find the first top-level type declaration after the statements start.
-  let typeLine = -1;
+  const statements: number[] = [];
+  const functions: number[][] = [];
+  const types: number[] = [];
+
   let depth = 0;
-  for (let j = first; j < lines.length; j++) {
+  let j = first;
+  while (j < lines.length) {
     if (depth === 0 && TYPE_DECL_RE.test(lines[j])) {
-      typeLine = j;
+      for (let k = j; k < lines.length; k++) types.push(k);
       break;
     }
+    if (depth === 0 && isFunctionDecl(lines[j])) {
+      const span: number[] = [];
+      let d = 0;
+      let opened = false;
+      const arrow = stripLiteralsAndComments(lines[j]).includes("=>");
+      let k = j;
+      for (; k < lines.length; k++) {
+        span.push(k);
+        const delta = braceDelta(lines[k]);
+        if (stripLiteralsAndComments(lines[k]).includes("{")) opened = true;
+        d += delta;
+        const clean = stripLiteralsAndComments(lines[k]).trim();
+        if (arrow && !opened && clean.endsWith(";")) break;
+        if (opened && d <= 0) break;
+      }
+      functions.push(span);
+      j = k + 1;
+      continue;
+    }
+    statements.push(j);
     depth += braceDelta(lines[j]);
+    j++;
   }
 
-  const out = [...lines];
-  const shift: Record<number, number> = {};
-  const addShift = (idx: number, n: number) => {
-    shift[idx + 1] = (shift[idx + 1] ?? 0) + n;
+  const out: string[] = [];
+  const lineMap: number[] = [];
+  const columnShift: Record<number, number> = {};
+  const emit = (text: string, orig: number, shift = 0) => {
+    out.push(text);
+    lineMap.push(orig + 1);
+    if (shift) columnShift[out.length] = shift;
   };
 
-  const end = typeLine === -1 ? lines.length : typeLine;
-
-  // `static` local functions are C# 8+; Mono supports plain local functions.
-  let d = 0;
-  for (let j = first; j < end; j++) {
-    if (d === 0) {
-      const before = out[j];
-      out[j] = out[j].replace(STATIC_LOCAL_FN_RE, "$1");
-      if (out[j].length !== before.length) addShift(j, out[j].length - before.length);
-    }
-    d += braceDelta(lines[j]);
+  for (let k = 0; k < first; k++) emit(lines[k], k);
+  for (const u of IMPLICIT_USINGS) if (!existing.has(u)) emit(`using ${u};`, 0);
+  const anchor = statements[0] ?? first;
+  emit("public static partial class __CodexProgram {", anchor);
+  emit("public static void Main(string[] args) {", anchor);
+  for (const k of statements) emit(lines[k], k);
+  emit("}", Math.max(0, (statements.at(-1) ?? anchor)));
+  for (const span of functions) {
+    span.forEach((k, idx) => {
+      if (idx === 0 && !/^\s*static\b/.test(lines[k])) {
+        emit("static " + lines[k], k, 7);
+      } else emit(lines[k], k);
+    });
   }
+  emit("}", Math.min(lines.length - 1, Math.max(0, (types[0] ?? lines.length) - 1)));
+  for (const k of types) emit(lines[k], k);
 
-  if (first >= lines.length) {
-    out.push(WRAPPER_HEADER + WRAPPER_CLOSE);
-  } else if (end === first) {
-    out[first] = WRAPPER_HEADER + WRAPPER_CLOSE + out[first];
-    addShift(first, WRAPPER_HEADER.length + WRAPPER_CLOSE.length);
-  } else {
-    out[first] = WRAPPER_HEADER + out[first];
-    addShift(first, WRAPPER_HEADER.length);
-    if (typeLine === -1) {
-      out.push(WRAPPER_CLOSE.trim());
-    } else {
-      out[typeLine] = WRAPPER_CLOSE + out[typeLine];
-      addShift(typeLine, WRAPPER_CLOSE.length);
-    }
-  }
-
-  const missing = IMPLICIT_USINGS.filter((u) => !existing.has(u))
-    .map((u) => `using ${u};`)
-    .join(" ");
-  if (missing) {
-    out[0] = `${missing} ${out[0]}`;
-    addShift(0, missing.length + 1);
-  }
-
-  return { source: out.join("\n"), wrapped: true, columnShift: shift, lineCount };
+  return { source: out.join("\n"), wrapped: true, lineMap, columnShift, lineCount };
 }
 
 export type Severity = "error" | "warning";
@@ -195,7 +211,7 @@ const DIAG_RE = /Main\.cs\((\d+),(\d+)\+?\):\s*(error|warning)\s+(CS\d+):\s*(.+)
 
 export function parseDiagnostics(
   output: string | null | undefined,
-  prepared?: Pick<PreparedSource, "columnShift" | "lineCount">,
+  prepared?: Pick<PreparedSource, "columnShift" | "lineCount" | "lineMap">,
 ): Diagnostic[] {
   if (!output) return [];
   const result: Diagnostic[] = [];
@@ -203,8 +219,9 @@ export function parseDiagnostics(
     let line = Number(m[1]);
     let column = Number(m[2]);
     if (prepared) {
-      if (line > prepared.lineCount) line = prepared.lineCount;
       column = Math.max(1, column - (prepared.columnShift[line] ?? 0));
+      if (prepared.lineMap.length) line = prepared.lineMap[Math.min(line, prepared.lineMap.length) - 1];
+      line = Math.min(Math.max(1, line), prepared.lineCount);
     }
     const code = m[4];
     result.push({
