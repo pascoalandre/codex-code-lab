@@ -3,6 +3,7 @@ import type { editor as MonacoEditor } from "monaco-editor";
 import { useEffect, useRef } from "react";
 import type { Diagnostic } from "@/lib/csharp";
 import type { ThemeId } from "@/lib/themes";
+import { EditorSkeleton } from "./EditorSkeleton";
 import { LANGUAGE_ID, setupMonaco } from "./monaco-setup";
 
 export interface CodeEditorHandle {
@@ -135,18 +136,5 @@ export default function CodeEditor({
         scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
       }}
     />
-  );
-}
-
-export function EditorSkeleton() {
-  return (
-    <div className="flex h-full w-full flex-col gap-2.5 bg-editor p-5">
-      {[62, 40, 75, 55, 30, 68, 45, 20].map((w, i) => (
-        <div key={i} className="flex items-center gap-4">
-          <span className="w-5 text-right font-mono text-xs text-muted-foreground/50">{i + 1}</span>
-          <div className="h-3 animate-pulse rounded bg-accent/60" style={{ width: `${w}%` }} />
-        </div>
-      ))}
-    </div>
   );
 }
