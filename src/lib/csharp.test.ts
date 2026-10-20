@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyStatus,
-  needsInput,
-  parseDiagnostics,
-  prepareSource,
-  WRAPPER_HEADER,
-} from "./csharp";
+import { classifyStatus, needsInput, parseDiagnostics, prepareSource } from "./csharp";
 
 describe("prepareSource", () => {
   it("leaves classic programs with Main untouched", () => {
@@ -22,16 +16,28 @@ describe("prepareSource", () => {
     expect(r.source).toContain("using System;");
   });
 
-  it("keeps user lines on the same line numbers", () => {
-    const code = 'using System;\n\nint a = 2;\nConsole.WriteLine(a);';
+  it("maps every generated statement line back to the user's line", () => {
+    const code = "using System;\n\nint a = 2;\nConsole.WriteLine(a);";
     const r = prepareSource(code);
-    expect(r.source.split("\n")[3]).toBe("Console.WriteLine(a);");
+    const gen = r.source.split("\n");
+    const idx = gen.indexOf("Console.WriteLine(a);");
+    expect(r.lineMap[idx]).toBe(4);
   });
 
-  it("keeps class declarations outside the generated Main", () => {
+  it("moves top-level functions out of Main as static methods", () => {
+    const code = "Console.WriteLine(Dobro(2));\nint Dobro(int x) => x * 2;";
+    const src = prepareSource(code).source;
+    expect(src).toContain("static int Dobro(int x) => x * 2;");
+    const mainStart = src.indexOf("Main(string[] args) {");
+    const mainEnd = src.indexOf("\n}", mainStart);
+    expect(src.slice(mainStart, mainEnd)).not.toContain("Dobro(int x)");
+  });
+
+  it("keeps class declarations outside the generated program class", () => {
     const code = "var p = new Ponto();\nclass Ponto { public int X; }";
-    const lines = prepareSource(code).source.split("\n");
-    expect(lines[1].startsWith("} } class Ponto")).toBe(true);
+    const gen = prepareSource(code).source.split("\n");
+    expect(gen.at(-1)).toBe("class Ponto { public int X; }");
+    expect(gen.at(-2)).toBe("}");
   });
 
   it("does not add a using the user already wrote", () => {
@@ -47,10 +53,11 @@ describe("parseDiagnostics", () => {
     expect(d).toMatchObject({ line: 4, column: 10, severity: "error", code: "CS1002" });
   });
 
-  it("subtracts the wrapper prefix from the column of the first statement", () => {
-    const prepared = prepareSource("using System;\nint x = ;");
-    const col = WRAPPER_HEADER.length + 9;
-    const [d] = parseDiagnostics(`Main.cs(2,${col}): error CS1525: Unexpected symbol`, prepared);
+  it("reports errors of wrapped programs on the original line", () => {
+    const prepared = prepareSource("using System;\n\nint x = ;");
+    const genLine = prepared.source.split("\n").indexOf("int x = ;") + 1;
+    const [d] = parseDiagnostics(`Main.cs(${genLine},9): error CS1525: Unexpected symbol`, prepared);
+    expect(d.line).toBe(3);
     expect(d.column).toBe(9);
   });
 });
