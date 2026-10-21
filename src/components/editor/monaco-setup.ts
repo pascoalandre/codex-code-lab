@@ -1,4 +1,5 @@
 import type { Monaco } from "@monaco-editor/react";
+import type { editor as MonacoEditorNs, Position } from "monaco-editor";
 import { EDITOR_PALETTES, type ThemeId } from "@/lib/themes";
 
 export const LANGUAGE_ID = "csharp-codex";
@@ -307,7 +308,7 @@ export function setupMonaco(monaco: Monaco) {
 
   monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
     triggerCharacters: ["."],
-    provideCompletionItems(model, position) {
+    provideCompletionItems(model: MonacoEditorNs.ITextModel, position: Position) {
       const word = model.getWordUntilPosition(position);
       const range = {
         startLineNumber: position.lineNumber,
