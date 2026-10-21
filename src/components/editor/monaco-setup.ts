@@ -320,11 +320,11 @@ export function setupMonaco(monaco: Monaco) {
       const member = before.match(/([A-Za-z_]\w*)\s*\.\s*$/);
 
       if (member) {
-        const owner = member[1] === "String" ? "string" : member[1];
+        const owner = member[1] === "String" ? "string" : (member[1] ?? "");
         const list = MEMBERS[owner];
         if (list) {
           return {
-            suggestions: list.map((m) => ({
+            suggestions: list.map((m: Member) => ({
               label: m.name,
               kind: m.kind === "property" ? K.Property : K.Method,
               detail: m.detail,
