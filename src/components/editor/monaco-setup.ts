@@ -23,7 +23,14 @@ const TYPE_KEYWORDS = [
   "string", "uint", "ulong", "ushort", "void", "var", "dynamic",
 ];
 
-const MEMBERS: Record<string, { name: string; detail: string; snippet?: string; kind?: "method" | "property" }[]> = {
+interface Member {
+  name: string;
+  detail: string;
+  snippet?: string;
+  kind?: "method" | "property";
+}
+
+const MEMBERS: Record<string, Member[]> = {
   Console: [
     { name: "WriteLine", detail: "Escreve uma linha na saída", snippet: "WriteLine($0);" },
     { name: "Write", detail: "Escreve sem quebra de linha", snippet: "Write($0);" },
@@ -37,10 +44,11 @@ const MEMBERS: Record<string, { name: string; detail: string; snippet?: string; 
   Math: [
     "Abs", "Acos", "Asin", "Atan", "Atan2", "Ceiling", "Cos", "Cosh", "Exp", "Floor", "Log", "Log10",
     "Max", "Min", "Pow", "Round", "Sign", "Sin", "Sinh", "Sqrt", "Tan", "Tanh", "Truncate",
-  ].map((n) => ({ name: n, detail: `Math.${n}(…)`, snippet: `${n}($0)` }))
+  ]
+    .map((n): Member => ({ name: n, detail: `Math.${n}(…)`, snippet: `${n}($0)` }))
     .concat([
-      { name: "PI", detail: "π = 3.14159…", kind: "property" as const, snippet: undefined },
-      { name: "E", detail: "e = 2.71828…", kind: "property" as const, snippet: undefined },
+      { name: "PI", detail: "π = 3.14159…", kind: "property" },
+      { name: "E", detail: "e = 2.71828…", kind: "property" },
     ]),
   string: [
     { name: "Join", detail: "Junta elementos com separador", snippet: 'Join(", ", $0)' },
@@ -320,7 +328,7 @@ export function setupMonaco(monaco: Monaco) {
               kind: m.kind === "property" ? K.Property : K.Method,
               detail: m.detail,
               insertText: m.snippet ?? m.name,
-              insertTextRules: m.snippet ? InsertAsSnippet : undefined,
+              ...(m.snippet ? { insertTextRules: InsertAsSnippet } : {}),
               range,
             })),
           };
