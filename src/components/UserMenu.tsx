@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { FolderGit2, LogIn, LogOut, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { displayNameOf, useAuth } from "@/hooks/use-auth";
 export function UserMenu({ compact = false }: { compact?: boolean }) {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   if (loading) return <div className="size-8 animate-pulse rounded-full bg-accent" />;
 
@@ -64,8 +66,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
+            await queryClient.cancelQueries();
+            queryClient.clear();
             await signOut();
-            navigate({ to: "/" });
+            navigate({ to: "/", replace: true });
           }}
         >
           <LogOut /> Terminar sessão
