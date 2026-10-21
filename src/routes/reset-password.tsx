@@ -40,12 +40,21 @@ function ResetPassword() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) return toast.error("Use pelo menos 6 caracteres.");
-    if (password !== confirm) return toast.error("As palavras-passe não coincidem.");
+    if (password.length < 6) {
+      toast.error("Use pelo menos 6 caracteres.");
+      return;
+    }
+    if (password !== confirm) {
+      toast.error("As palavras-passe não coincidem.");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Palavra-passe actualizada");
     navigate({ to: "/projects" });
   };

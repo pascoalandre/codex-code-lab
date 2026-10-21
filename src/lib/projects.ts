@@ -27,7 +27,7 @@ export const projectQuery = (id: string) =>
     },
   });
 
-export async function createProject(input: { name: string; code: string; stdin?: string; description?: string }) {
+export async function createProject(input: { name: string; code: string; stdin?: string | undefined; description?: string | null | undefined }) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Precisa de iniciar sessão.");
   const { data, error } = await supabase

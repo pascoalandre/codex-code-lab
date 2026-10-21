@@ -1274,7 +1274,7 @@ class Program
   },
 ];
 
-export const DEFAULT_CODE = EXAMPLES[0].code;
+export const DEFAULT_CODE = EXAMPLES[0]!.code;
 
 export function getExample(id: string): Example | undefined {
   return EXAMPLES.find((e) => e.id === id);

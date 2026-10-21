@@ -39,11 +39,11 @@ export const DEFAULT_THEME: ThemeId = "codex-dark";
 export const THEME_STORAGE_KEY = "codex-theme";
 
 export function getTheme(id: string | null | undefined): ThemeDef {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  return THEMES.find((t) => t.id === id) ?? THEMES[0]!;
 }
 
 export function themeFor(family: ThemeFamily, mode: ThemeMode): ThemeDef {
-  return THEMES.find((t) => t.family === family && t.mode === mode) ?? THEMES[0];
+  return THEMES.find((t) => t.family === family && t.mode === mode) ?? THEMES[0]!;
 }
 
 /** Inline script run before paint so the stored theme applies without a flash. */

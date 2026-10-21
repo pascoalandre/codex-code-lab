@@ -220,17 +220,18 @@ export function parseDiagnostics(
     let column = Number(m[2]);
     if (prepared) {
       column = Math.max(1, column - (prepared.columnShift[line] ?? 0));
-      if (prepared.lineMap.length) line = prepared.lineMap[Math.min(line, prepared.lineMap.length) - 1];
+      if (prepared.lineMap.length) line = prepared.lineMap[Math.min(line, prepared.lineMap.length) - 1] ?? line;
       line = Math.min(Math.max(1, line), prepared.lineCount);
     }
-    const code = m[4];
+    const code = m[4] ?? "";
+    const hint = HINTS[code];
     result.push({
       line,
       column,
       severity: m[3] as Severity,
       code,
-      message: m[5].trim(),
-      hint: HINTS[code],
+      message: (m[5] ?? "").trim(),
+      ...(hint ? { hint } : {}),
     });
   }
   return result;

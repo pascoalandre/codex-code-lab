@@ -32,7 +32,7 @@ export const Route = createFileRoute("/_authenticated/projects/$projectId")({
   errorComponent: ({ error }) => (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background p-6 text-center">
       <h1 className="text-xl font-semibold">Não foi possível abrir o projecto</h1>
-      <p className="text-sm text-muted-foreground">{error.message}</p>
+      <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Erro desconhecido"}</p>
       <Link to="/projects" className="text-sm text-primary underline underline-offset-4">
         Voltar aos projectos
       </Link>

@@ -64,8 +64,8 @@ describe("parseDiagnostics", () => {
     const prepared = prepareSource("using System;\n\nint x = ;");
     const genLine = prepared.source.split("\n").indexOf("int x = ;") + 1;
     const [d] = parseDiagnostics(`Main.cs(${genLine},9): error CS1525: Unexpected symbol`, prepared);
-    expect(d.line).toBe(3);
-    expect(d.column).toBe(9);
+    expect(d?.line).toBe(3);
+    expect(d?.column).toBe(9);
   });
 });
 
