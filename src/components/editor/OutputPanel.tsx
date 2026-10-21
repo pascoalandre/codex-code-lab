@@ -16,7 +16,7 @@ interface OutputPanelProps {
   inputCalls: number;
   onReveal: (d: Diagnostic) => void;
   onClear: () => void;
-  hideTabs?: boolean;
+  hideTabs?: boolean | undefined;
 }
 
 export function OutputPanel({

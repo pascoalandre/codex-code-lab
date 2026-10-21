@@ -66,5 +66,5 @@ export function useAuth() {
 export function displayNameOf(user: User | null): string {
   if (!user) return "";
   const m = user.user_metadata ?? {};
-  return (m.display_name || m.full_name || m.name || user.email?.split("@")[0] || "Programador") as string;
+  return (m["display_name"] || m["full_name"] || m["name"] || user.email?.split("@")[0] || "Programador") as string;
 }

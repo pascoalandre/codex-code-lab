@@ -79,7 +79,7 @@ export function prepareSource(code: string): PreparedSource {
   let first = 0;
   let inBlockComment = false;
   while (first < lines.length) {
-    const t = lines[first].trim();
+    const t = lines[first]!.trim();
     if (inBlockComment) {
       if (t.includes("*/")) inBlockComment = false;
       first++;
@@ -96,7 +96,7 @@ export function prepareSource(code: string): PreparedSource {
     }
     const m = t.match(USING_DIRECTIVE_RE);
     if (m) {
-      existing.add(m[1]);
+      existing.add(m[1]!);
       first++;
       continue;
     }
@@ -110,22 +110,22 @@ export function prepareSource(code: string): PreparedSource {
   let depth = 0;
   let j = first;
   while (j < lines.length) {
-    if (depth === 0 && TYPE_DECL_RE.test(lines[j])) {
+    if (depth === 0 && TYPE_DECL_RE.test(lines[j]!)) {
       for (let k = j; k < lines.length; k++) types.push(k);
       break;
     }
-    if (depth === 0 && isFunctionDecl(lines[j])) {
+    if (depth === 0 && isFunctionDecl(lines[j]!)) {
       const span: number[] = [];
       let d = 0;
       let opened = false;
-      const arrow = stripLiteralsAndComments(lines[j]).includes("=>");
+      const arrow = stripLiteralsAndComments(lines[j]!).includes("=>");
       let k = j;
       for (; k < lines.length; k++) {
         span.push(k);
-        const delta = braceDelta(lines[k]);
-        if (stripLiteralsAndComments(lines[k]).includes("{")) opened = true;
+        const delta = braceDelta(lines[k]!);
+        if (stripLiteralsAndComments(lines[k]!).includes("{")) opened = true;
         d += delta;
-        const clean = stripLiteralsAndComments(lines[k]).trim();
+        const clean = stripLiteralsAndComments(lines[k]!).trim();
         if (arrow && !opened && clean.endsWith(";")) break;
         if (opened && d <= 0) break;
       }
@@ -134,7 +134,7 @@ export function prepareSource(code: string): PreparedSource {
       continue;
     }
     statements.push(j);
-    depth += braceDelta(lines[j]);
+    depth += braceDelta(lines[j]!);
     j++;
   }
 
@@ -147,22 +147,22 @@ export function prepareSource(code: string): PreparedSource {
     if (shift) columnShift[out.length] = shift;
   };
 
-  for (let k = 0; k < first; k++) emit(lines[k], k);
+  for (let k = 0; k < first; k++) emit(lines[k]!, k);
   for (const u of IMPLICIT_USINGS) if (!existing.has(u)) emit(`using ${u};`, 0);
   const anchor = statements[0] ?? first;
   emit("public static partial class __CodexProgram {", anchor);
   emit("public static void Main(string[] args) {", anchor);
-  for (const k of statements) emit(lines[k], k);
+  for (const k of statements) emit(lines[k]!, k);
   emit("}", Math.max(0, (statements.at(-1) ?? anchor)));
   for (const span of functions) {
     span.forEach((k, idx) => {
-      if (idx === 0 && !/^\s*static\b/.test(lines[k])) {
-        emit("static " + lines[k], k, 7);
-      } else emit(lines[k], k);
+      if (idx === 0 && !/^\s*static\b/.test(lines[k]!)) {
+        emit("static " + lines[k]!, k, 7);
+      } else emit(lines[k]!, k);
     });
   }
   emit("}", Math.min(lines.length - 1, Math.max(0, (types[0] ?? lines.length) - 1)));
-  for (const k of types) emit(lines[k], k);
+  for (const k of types) emit(lines[k]!, k);
 
   return { source: out.join("\n"), wrapped: true, lineMap, columnShift, lineCount };
 }
@@ -220,17 +220,18 @@ export function parseDiagnostics(
     let column = Number(m[2]);
     if (prepared) {
       column = Math.max(1, column - (prepared.columnShift[line] ?? 0));
-      if (prepared.lineMap.length) line = prepared.lineMap[Math.min(line, prepared.lineMap.length) - 1];
+      if (prepared.lineMap.length) line = prepared.lineMap[Math.min(line, prepared.lineMap.length) - 1] ?? line;
       line = Math.min(Math.max(1, line), prepared.lineCount);
     }
-    const code = m[4];
+    const code = m[4] ?? "";
+    const hint = HINTS[code];
     result.push({
       line,
       column,
       severity: m[3] as Severity,
       code,
-      message: m[5].trim(),
-      hint: HINTS[code],
+      message: (m[5] ?? "").trim(),
+      ...(hint ? { hint } : {}),
     });
   }
   return result;
@@ -285,7 +286,7 @@ export function stripDigitSeparators(src: string): string {
   let i = 0;
   const n = src.length;
   while (i < n) {
-    const c = src[i];
+    const c = src[i]!;
     const nx = src[i + 1];
     if (c === "/" && nx === "/") {
       const e = src.indexOf("\n", i);

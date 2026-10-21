@@ -1,4 +1,5 @@
 import type { Monaco } from "@monaco-editor/react";
+import type { editor as MonacoEditorNs, Position } from "monaco-editor";
 import { EDITOR_PALETTES, type ThemeId } from "@/lib/themes";
 
 export const LANGUAGE_ID = "csharp-codex";
@@ -23,7 +24,14 @@ const TYPE_KEYWORDS = [
   "string", "uint", "ulong", "ushort", "void", "var", "dynamic",
 ];
 
-const MEMBERS: Record<string, { name: string; detail: string; snippet?: string; kind?: "method" | "property" }[]> = {
+interface Member {
+  name: string;
+  detail: string;
+  snippet?: string;
+  kind?: "method" | "property";
+}
+
+const MEMBERS: Record<string, Member[]> = {
   Console: [
     { name: "WriteLine", detail: "Escreve uma linha na saída", snippet: "WriteLine($0);" },
     { name: "Write", detail: "Escreve sem quebra de linha", snippet: "Write($0);" },
@@ -37,10 +45,11 @@ const MEMBERS: Record<string, { name: string; detail: string; snippet?: string; 
   Math: [
     "Abs", "Acos", "Asin", "Atan", "Atan2", "Ceiling", "Cos", "Cosh", "Exp", "Floor", "Log", "Log10",
     "Max", "Min", "Pow", "Round", "Sign", "Sin", "Sinh", "Sqrt", "Tan", "Tanh", "Truncate",
-  ].map((n) => ({ name: n, detail: `Math.${n}(…)`, snippet: `${n}($0)` }))
+  ]
+    .map((n): Member => ({ name: n, detail: `Math.${n}(…)`, snippet: `${n}($0)` }))
     .concat([
-      { name: "PI", detail: "π = 3.14159…", kind: "property" as const, snippet: undefined },
-      { name: "E", detail: "e = 2.71828…", kind: "property" as const, snippet: undefined },
+      { name: "PI", detail: "π = 3.14159…", kind: "property" },
+      { name: "E", detail: "e = 2.71828…", kind: "property" },
     ]),
   string: [
     { name: "Join", detail: "Junta elementos com separador", snippet: 'Join(", ", $0)' },
@@ -299,7 +308,7 @@ export function setupMonaco(monaco: Monaco) {
 
   monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
     triggerCharacters: ["."],
-    provideCompletionItems(model, position) {
+    provideCompletionItems(model: MonacoEditorNs.ITextModel, position: Position) {
       const word = model.getWordUntilPosition(position);
       const range = {
         startLineNumber: position.lineNumber,
@@ -311,16 +320,16 @@ export function setupMonaco(monaco: Monaco) {
       const member = before.match(/([A-Za-z_]\w*)\s*\.\s*$/);
 
       if (member) {
-        const owner = member[1] === "String" ? "string" : member[1];
+        const owner = member[1] === "String" ? "string" : (member[1] ?? "");
         const list = MEMBERS[owner];
         if (list) {
           return {
-            suggestions: list.map((m) => ({
+            suggestions: list.map((m: Member) => ({
               label: m.name,
               kind: m.kind === "property" ? K.Property : K.Method,
               detail: m.detail,
               insertText: m.snippet ?? m.name,
-              insertTextRules: m.snippet ? InsertAsSnippet : undefined,
+              ...(m.snippet ? { insertTextRules: InsertAsSnippet } : {}),
               range,
             })),
           };
