@@ -55,7 +55,7 @@ interface Prefs {
   minimap: boolean;
   layout: "horizontal" | "vertical";
 }
-const PREFS_KEY = "codex-editor-prefs";
+const PREFS_KEY = "codex-editor-prefs-v2";
 const DEFAULT_PREFS: Prefs = { fontSize: 14, wordWrap: false, minimap: true, layout: "horizontal" };
 
 function usePrefs() {
@@ -312,8 +312,9 @@ export function Workspace({
               onChange={onCodeChange}
               themeId={theme.id}
               fontSize={isMobile ? Math.min(prefs.fontSize, 13) : prefs.fontSize}
-              wordWrap={isMobile || prefs.wordWrap}
+              wordWrap={prefs.wordWrap}
               minimap={!isMobile && prefs.minimap}
+              compact={isMobile}
               diagnostics={diagnostics}
               onRun={() => execute()}
               onSave={onSave}
@@ -501,7 +502,7 @@ export function Workspace({
 
       {/* Status bar */}
       <footer className="flex h-6 shrink-0 items-center gap-3 bg-statusbar px-3 font-mono text-[11px] text-statusbar-foreground">
-        <span className="font-semibold">C# · Mono</span>
+        <span className="font-semibold">{result?.engine ?? "C# 12 · .NET 8"}</span>
         <span className="hidden sm:inline">
           Ln {cursor.line}, Col {cursor.column}
         </span>

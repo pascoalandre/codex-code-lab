@@ -196,7 +196,7 @@ function IdePreview() {
           <p className="mt-1 text-success">✓ Executado com sucesso · 0.031 s · 4.7 MB</p>
         </div>
         <div className="flex h-6 items-center gap-3 bg-statusbar px-3 font-mono text-[10px] text-statusbar-foreground">
-          <span className="font-semibold">C# · Mono</span>
+          <span className="font-semibold">C# 12 · .NET 8</span>
           <span>Ln 10, Col 54</span>
           <span className="ml-auto">UTF-8</span>
         </div>
