@@ -190,7 +190,7 @@ function IdePreview() {
         </pre>
         <div className="border-t border-border bg-terminal px-4 py-3 font-mono text-[11.5px] leading-relaxed sm:text-[12.5px]">
           <p className="text-muted-foreground">
-            <span className="text-primary">$</span> mcs Program.cs && mono Program.exe
+            <span className="text-primary">$</span> dotnet run
           </p>
           <p className="break-all text-foreground">50! = 30414093201713378043612608166064768844377641568960512000000000000</p>
           <p className="mt-1 text-success">✓ Executado com sucesso · 0.031 s · 4.7 MB</p>
