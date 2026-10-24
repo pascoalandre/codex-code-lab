@@ -80,6 +80,21 @@ export default function CodeEditor({
     monacoRef.current?.editor.setTheme(themeId);
   }, [themeId]);
 
+  // The editor owns its text while typing (uncontrolled). Only push a new
+  // value in when it came from outside (example loaded, project opened),
+  // never echo back our own keystrokes — that drops characters and moves the
+  // cursor when typing fast.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (value === lastEmittedRef.current) return;
+    const model = editor.getModel();
+    if (!model || model.getValue() === value) return;
+    lastEmittedRef.current = value;
+    editor.executeEdits("external", [{ range: model.getFullModelRange(), text: value }]);
+    editor.setPosition({ lineNumber: 1, column: 1 });
+  }, [value]);
+
   useEffect(() => {
     const monaco = monacoRef.current;
     const model = editorRef.current?.getModel();
