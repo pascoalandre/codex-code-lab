@@ -115,7 +115,7 @@ export default function CodeEditor({
       loading={<EditorSkeleton />}
       options={{
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-        fontLigatures: true,
+        fontLigatures: false,
         fontSize,
         lineHeight: Math.round(fontSize * 1.65),
         minimap: { enabled: minimap, renderCharacters: false, scale: 1 },
