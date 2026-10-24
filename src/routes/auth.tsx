@@ -256,6 +256,9 @@ function AuthPage() {
             </div>
           )}
         </div>
+        <p className="text-center text-xs text-muted-foreground lg:hidden">
+          Desenvolvido por: <span className="font-medium text-foreground">Pascoal André (Whizy Safary)</span>
+        </p>
       </main>
     </div>
   );
