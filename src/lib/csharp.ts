@@ -271,7 +271,7 @@ export function prepareModernSource(code: string): PreparedSource {
 export function cleanBuildOutput(output: string): string {
   const lines = output.split("\n");
   const diag = lines.filter((l) => /Main\.cs\(\d+,\d+\)/.test(l));
-  if (!diag.length) return output.trim();
+  if (!diag.length) return /Build succeeded/i.test(output) ? "" : output.trim();
   return [...new Set(diag.map((l) => l.replace(/^.*?Main\.cs/, "Main.cs").replace(/\s*\[[^\]]*\.csproj\]\s*$/, "")))].join("\n");
 }
 
