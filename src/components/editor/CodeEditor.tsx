@@ -44,6 +44,7 @@ export default function CodeEditor({
   const monacoRef = useRef<Monaco | null>(null);
   const runRef = useRef(onRun);
   const saveRef = useRef(onSave);
+  const lastEmittedRef = useRef(value);
   runRef.current = onRun;
   saveRef.current = onSave;
 
@@ -120,11 +121,14 @@ export default function CodeEditor({
     <Editor
       height="100%"
       language={LANGUAGE_ID}
-      value={value}
+      defaultValue={value}
       theme={themeId}
       beforeMount={setupMonaco}
       onMount={handleMount}
-      onChange={(v) => onChange(v ?? "")}
+      onChange={(v) => {
+        lastEmittedRef.current = v ?? "";
+        onChange(v ?? "");
+      }}
       loading={<EditorSkeleton />}
       options={{
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
