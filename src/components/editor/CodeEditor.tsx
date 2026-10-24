@@ -17,7 +17,6 @@ export interface CodeEditorProps {
   onChange: (value: string) => void;
   themeId: ThemeId;
   fontSize: number;
-  wordWrap: boolean;
   minimap: boolean;
   /** Narrow screens: slimmer gutter so code uses all the width. */
   compact?: boolean;
@@ -33,7 +32,6 @@ export default function CodeEditor({
   onChange,
   themeId,
   fontSize,
-  wordWrap,
   minimap,
   compact = false,
   diagnostics,
@@ -46,6 +44,7 @@ export default function CodeEditor({
   const monacoRef = useRef<Monaco | null>(null);
   const runRef = useRef(onRun);
   const saveRef = useRef(onSave);
+  const lastEmittedRef = useRef(value);
   runRef.current = onRun;
   saveRef.current = onSave;
 
@@ -82,6 +81,21 @@ export default function CodeEditor({
     monacoRef.current?.editor.setTheme(themeId);
   }, [themeId]);
 
+  // The editor owns its text while typing (uncontrolled). Only push a new
+  // value in when it came from outside (example loaded, project opened),
+  // never echo back our own keystrokes — that drops characters and moves the
+  // cursor when typing fast.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (value === lastEmittedRef.current) return;
+    const model = editor.getModel();
+    if (!model || model.getValue() === value) return;
+    lastEmittedRef.current = value;
+    editor.executeEdits("external", [{ range: model.getFullModelRange(), text: value }]);
+    editor.setPosition({ lineNumber: 1, column: 1 });
+  }, [value]);
+
   useEffect(() => {
     const monaco = monacoRef.current;
     const model = editorRef.current?.getModel();
@@ -107,11 +121,14 @@ export default function CodeEditor({
     <Editor
       height="100%"
       language={LANGUAGE_ID}
-      value={value}
+      defaultValue={value}
       theme={themeId}
       beforeMount={setupMonaco}
       onMount={handleMount}
-      onChange={(v) => onChange(v ?? "")}
+      onChange={(v) => {
+        lastEmittedRef.current = v ?? "";
+        onChange(v ?? "");
+      }}
       loading={<EditorSkeleton />}
       options={{
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -119,8 +136,15 @@ export default function CodeEditor({
         fontSize,
         lineHeight: Math.round(fontSize * 1.65),
         minimap: { enabled: minimap, renderCharacters: false, scale: 1 },
-        wordWrap: wordWrap ? "on" : "off",
-        wrappingIndent: "same",
+        // Never wrap or break lines: long lines scroll sideways.
+        wordWrap: "off",
+        wordWrapOverride1: "off",
+        wordWrapOverride2: "off",
+        // Enter always makes a plain new line; suggestions are accepted with Tab or a tap.
+        acceptSuggestionOnEnter: "off",
+        acceptSuggestionOnCommitCharacter: false,
+        autoIndent: "advanced",
+        formatOnType: false,
         lineNumbersMinChars: compact ? 2 : 3,
         lineDecorationsWidth: compact ? 6 : 10,
         glyphMargin: false,
