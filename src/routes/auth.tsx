@@ -3,7 +3,6 @@ import { ArrowLeft, Loader2, MailCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import "@lovable.dev/cloud-auth-js/styles.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,9 +85,9 @@ function AuthPage() {
     }
   };
 
-  const oauth = async (provider: "google" | "lovable") => {
+  const oauth = async () => {
     sessionStorage.setItem("codex-after-auth", target);
-    const result = await lovable.auth.signInWithOAuth(provider, { redirect_uri: `${window.location.origin}/auth` });
+    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/auth` });
     if (result.error) toast.error("Não foi possível entrar. Tente novamente.");
   };
 
@@ -131,7 +130,12 @@ function AuthPage() {
             </code>
           </pre>
         </div>
-        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} C# Codex</p>
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <p>
+            Desenvolvido por: <span className="font-medium text-foreground">Pascoal André (Whizy Safary)</span>
+          </p>
+          <p>© {new Date().getFullYear()} C# Codex</p>
+        </div>
       </aside>
 
       {/* Form side */}
@@ -181,12 +185,9 @@ function AuthPage() {
               {mode !== "forgot" && (
                 <>
                   <div className="mt-6 grid gap-2">
-                    <Button variant="subtle" className="h-10" onClick={() => oauth("google")} type="button">
+                    <Button variant="subtle" className="h-10" onClick={() => oauth()} type="button">
                       <GoogleIcon /> Continuar com Google
                     </Button>
-                    <button type="button" className="lovable-auth-button" onClick={() => oauth("lovable")}>
-                      Continue with Lovable
-                    </button>
                   </div>
                   <div className="my-6 flex items-center gap-3">
                     <span className="h-px flex-1 bg-border" />

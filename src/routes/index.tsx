@@ -409,7 +409,12 @@ function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:px-6">
         <Logo />
         <p className="sm:ml-4">Editor, compilador e execução de C# no navegador.</p>
-        <p className="font-mono text-xs sm:ml-auto">© {new Date().getFullYear()} C# Codex</p>
+        <div className="space-y-1 font-mono text-xs sm:ml-auto sm:text-right">
+          <p>
+            Desenvolvido por: <span className="font-medium text-foreground">Pascoal André (Whizy Safary)</span>
+          </p>
+          <p>© {new Date().getFullYear()} C# Codex</p>
+        </div>
       </div>
     </footer>
   );

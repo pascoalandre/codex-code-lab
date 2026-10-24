@@ -51,12 +51,11 @@ const CodeEditor = lazy(() => import("./CodeEditor"));
 
 interface Prefs {
   fontSize: number;
-  wordWrap: boolean;
   minimap: boolean;
   layout: "horizontal" | "vertical";
 }
 const PREFS_KEY = "codex-editor-prefs-v2";
-const DEFAULT_PREFS: Prefs = { fontSize: 14, wordWrap: false, minimap: true, layout: "horizontal" };
+const DEFAULT_PREFS: Prefs = { fontSize: 14, minimap: true, layout: "horizontal" };
 
 function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -312,7 +311,6 @@ export function Workspace({
               onChange={onCodeChange}
               themeId={theme.id}
               fontSize={isMobile ? Math.min(prefs.fontSize, 13) : prefs.fontSize}
-              wordWrap={prefs.wordWrap}
               minimap={!isMobile && prefs.minimap}
               compact={isMobile}
               diagnostics={diagnostics}
@@ -575,10 +573,6 @@ function EditorSettings({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Parti
               </Button>
             </div>
           </div>
-          <label className="flex items-center justify-between">
-            <span className="text-sm">Quebra de linha</span>
-            <Switch checked={prefs.wordWrap} onCheckedChange={(v) => setPrefs({ wordWrap: v })} />
-          </label>
           <label className="flex items-center justify-between">
             <span className="text-sm">Minimapa</span>
             <Switch checked={prefs.minimap} onCheckedChange={(v) => setPrefs({ minimap: v })} />

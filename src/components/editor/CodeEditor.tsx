@@ -17,7 +17,6 @@ export interface CodeEditorProps {
   onChange: (value: string) => void;
   themeId: ThemeId;
   fontSize: number;
-  wordWrap: boolean;
   minimap: boolean;
   /** Narrow screens: slimmer gutter so code uses all the width. */
   compact?: boolean;
@@ -33,7 +32,6 @@ export default function CodeEditor({
   onChange,
   themeId,
   fontSize,
-  wordWrap,
   minimap,
   compact = false,
   diagnostics,
@@ -119,8 +117,15 @@ export default function CodeEditor({
         fontSize,
         lineHeight: Math.round(fontSize * 1.65),
         minimap: { enabled: minimap, renderCharacters: false, scale: 1 },
-        wordWrap: wordWrap ? "on" : "off",
-        wrappingIndent: "same",
+        // Never wrap or break lines: long lines scroll sideways.
+        wordWrap: "off",
+        wordWrapOverride1: "off",
+        wordWrapOverride2: "off",
+        // Enter always makes a plain new line; suggestions are accepted with Tab or a tap.
+        acceptSuggestionOnEnter: "off",
+        acceptSuggestionOnCommitCharacter: false,
+        autoIndent: "advanced",
+        formatOnType: false,
         lineNumbersMinChars: compact ? 2 : 3,
         lineDecorationsWidth: compact ? 6 : 10,
         glyphMargin: false,
