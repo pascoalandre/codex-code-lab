@@ -215,6 +215,7 @@ export function parseDiagnostics(
 ): Diagnostic[] {
   if (!output) return [];
   const result: Diagnostic[] = [];
+  const seen = new Set<string>();
   for (const m of output.matchAll(DIAG_RE)) {
     let line = Number(m[1]);
     let column = Number(m[2]);
@@ -224,17 +225,54 @@ export function parseDiagnostics(
       line = Math.min(Math.max(1, line), prepared.lineCount);
     }
     const code = m[4] ?? "";
+    const message = (m[5] ?? "").replace(/\s*\[[^\]]*\.csproj\]\s*$/, "").trim();
+    // dotnet build repeats every diagnostic in its summary.
+    const key = `${line}:${column}:${code}:${message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const hint = HINTS[code];
     result.push({
       line,
       column,
       severity: m[3] as Severity,
       code,
-      message: (m[5] ?? "").trim(),
+      message,
       ...(hint ? { hint } : {}),
     });
   }
   return result;
+}
+
+/**
+ * Prepares source for the modern .NET compiler (C# 12). It understands
+ * top-level statements, switch expressions, records and patterns natively, so
+ * only the implicit usings are added; `#line 1` keeps diagnostics on the
+ * user's own line numbers.
+ */
+export function prepareModernSource(code: string): PreparedSource {
+  const normalized = code.replace(/\r\n?/g, "\n");
+  const header = [
+    ...IMPLICIT_USINGS.map((u) => `global using ${u};`),
+    "global using System.Numerics;",
+    "#nullable enable annotations",
+    "#pragma warning disable CS0105, CS8019",
+    "#line 1",
+  ];
+  return {
+    source: header.join("\n") + "\n" + normalized,
+    wrapped: false,
+    lineMap: [],
+    columnShift: {},
+    lineCount: normalized.split("\n").length,
+  };
+}
+
+/** Removes the dotnet build noise around the real compiler messages. */
+export function cleanBuildOutput(output: string): string {
+  const lines = output.split("\n");
+  const diag = lines.filter((l) => /Main\.cs\(\d+,\d+\)/.test(l));
+  if (!diag.length) return /Build succeeded/i.test(output) ? "" : output.trim();
+  return [...new Set(diag.map((l) => l.replace(/^.*?Main\.cs/, "Main.cs").replace(/\s*\[[^\]]*\.csproj\]\s*$/, "")))].join("\n");
 }
 
 function stripComments(code: string): string {

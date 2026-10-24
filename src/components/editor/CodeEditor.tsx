@@ -19,6 +19,8 @@ export interface CodeEditorProps {
   fontSize: number;
   wordWrap: boolean;
   minimap: boolean;
+  /** Narrow screens: slimmer gutter so code uses all the width. */
+  compact?: boolean;
   diagnostics: Diagnostic[];
   onRun: () => void;
   onSave: () => void;
@@ -33,6 +35,7 @@ export default function CodeEditor({
   fontSize,
   wordWrap,
   minimap,
+  compact = false,
   diagnostics,
   onRun,
   onSave,
@@ -112,28 +115,39 @@ export default function CodeEditor({
       loading={<EditorSkeleton />}
       options={{
         fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-        fontLigatures: true,
+        fontLigatures: false,
         fontSize,
         lineHeight: Math.round(fontSize * 1.65),
         minimap: { enabled: minimap, renderCharacters: false, scale: 1 },
         wordWrap: wordWrap ? "on" : "off",
+        wrappingIndent: "same",
+        lineNumbersMinChars: compact ? 2 : 3,
+        lineDecorationsWidth: compact ? 6 : 10,
+        glyphMargin: false,
+        folding: !compact,
+        overviewRulerLanes: compact ? 0 : 2,
+        hideCursorInOverviewRuler: true,
         smoothScrolling: true,
         cursorBlinking: "smooth",
         cursorSmoothCaretAnimation: "on",
         renderLineHighlight: "all",
         bracketPairColorization: { enabled: true },
         guides: { bracketPairs: "active", indentation: true },
-        padding: { top: 14, bottom: 14 },
+        padding: { top: compact ? 8 : 14, bottom: compact ? 8 : 14 },
         scrollBeyondLastLine: false,
         automaticLayout: true,
         tabSize: 4,
         insertSpaces: true,
-        stickyScroll: { enabled: true },
+        stickyScroll: { enabled: !compact },
         suggest: { showWords: true, preview: true },
         quickSuggestions: { other: true, comments: false, strings: false },
         formatOnPaste: false,
         fixedOverflowWidgets: true,
-        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+        scrollbar: {
+          verticalScrollbarSize: compact ? 6 : 10,
+          horizontalScrollbarSize: compact ? 6 : 10,
+          alwaysConsumeMouseWheel: false,
+        },
       }}
     />
   );

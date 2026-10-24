@@ -3,6 +3,7 @@ import {
   classifyStatus,
   needsInput,
   parseDiagnostics,
+  prepareModernSource,
   prepareSource,
   stripDigitSeparators,
   toCompilerSource,
@@ -97,5 +98,23 @@ describe("toCompilerSource", () => {
   });
   it("prefixes a byte order mark so emoji compile", () => {
     expect(toCompilerSource("x").charCodeAt(0)).toBe(0xfeff);
+  });
+});
+
+describe("prepareModernSource", () => {
+  it("keeps the user's code intact after the implicit usings", () => {
+    const code = 'string s = 5 switch { >= 5 => "a", _ => "b" };';
+    const r = prepareModernSource(code);
+    expect(r.source.endsWith("#line 1\n" + code)).toBe(true);
+    expect(r.source).toContain("global using System.Linq;");
+  });
+});
+
+describe("dotnet diagnostics", () => {
+  it("drops the repeated summary copy and the project suffix", () => {
+    const line = "/box/Main.cs(6,9): error CS0029: Cannot convert [/box/Main.csproj]";
+    const d = parseDiagnostics(`${line}\nBuild FAILED.\n${line}`, prepareModernSource("a\nb\nc\nd\ne\nf"));
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ line: 6, column: 9, message: "Cannot convert" });
   });
 });

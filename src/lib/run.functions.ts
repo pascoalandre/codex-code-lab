@@ -2,10 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   classifyStatus,
+  cleanBuildOutput,
   parseDiagnostics,
+  prepareModernSource,
   prepareSource,
   toCompilerSource,
   type Diagnostic,
+  type PreparedSource,
   type RunStatus,
 } from "./csharp";
 
@@ -26,6 +29,8 @@ export interface RunResult {
   memory: number | null;
   exitCode: number | null;
   wrapped: boolean;
+  /** Compiler that produced the result. */
+  engine?: string;
   error?: string;
 }
 
@@ -46,14 +51,124 @@ function fromBase64(s: string | null | undefined): string {
   return new TextDecoder().decode(bytes);
 }
 
-const ENGINE_URL =
-  "https://ce.judge0.com/submissions?base64_encoded=true&wait=true&fields=stdout,stderr,compile_output,message,status,time,memory,exit_code";
+const FIELDS = "base64_encoded=true&wait=true&fields=stdout,stderr,compile_output,message,status,time,memory,exit_code";
+
+interface Engine {
+  name: string;
+  url: string;
+  languageId: number;
+  prepare: (code: string) => PreparedSource;
+  toSource: (prepared: PreparedSource) => string;
+  compilerOptions?: string;
+  cleanCompileOutput: (out: string) => string;
+}
+
+/** Primary: .NET 8 (C# 12) — switch expressions, records, patterns, etc. */
+const DOTNET: Engine = {
+  name: ".NET 8 · C# 12",
+  url: `https://extra-ce.judge0.com/submissions?${FIELDS}`,
+  languageId: 30,
+  prepare: prepareModernSource,
+  toSource: (p) => p.source,
+  cleanCompileOutput: cleanBuildOutput,
+};
+
+/** Fallback: Mono (C# 7) when the .NET engine is unavailable. */
+const MONO: Engine = {
+  name: "Mono · C# 7",
+  url: `https://ce.judge0.com/submissions?${FIELDS}`,
+  languageId: 51,
+  prepare: prepareSource,
+  toSource: (p) => toCompilerSource(p.source),
+  compilerOptions: "-r:System.Numerics.dll",
+  cleanCompileOutput: (o) => o,
+};
+
+type Attempt =
+  | { kind: "result"; result: RunResult }
+  | { kind: "unavailable"; busy: boolean; detail: string };
+
+interface EngineJson {
+  stdout?: string | null;
+  stderr?: string | null;
+  compile_output?: string | null;
+  message?: string | null;
+  status?: { id: number; description: string };
+  time?: string | null;
+  memory?: number | null;
+  exit_code?: number | null;
+}
+
+async function runOn(engine: Engine, code: string, stdin: string): Promise<Attempt> {
+  const prepared = engine.prepare(code);
+  let res: Response;
+  try {
+    res = await fetch(engine.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        language_id: engine.languageId,
+        source_code: toBase64(engine.toSource(prepared)),
+        stdin: toBase64(stdin),
+        ...(engine.compilerOptions ? { compiler_options: engine.compilerOptions } : {}),
+        cpu_time_limit: 8,
+        wall_time_limit: 15,
+        memory_limit: 512000,
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (e) {
+    console.error(`${engine.name} unreachable`, e);
+    return { kind: "unavailable", busy: false, detail: "unreachable" };
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`${engine.name} status`, res.status, body);
+    return { kind: "unavailable", busy: res.status === 429 || res.status === 503, detail: String(res.status) };
+  }
+
+  const json = (await res.json()) as EngineJson;
+  const statusId = json.status?.id ?? 13;
+  const status = classifyStatus(statusId);
+  if (status === "internal-error") {
+    return { kind: "unavailable", busy: false, detail: json.status?.description ?? "internal" };
+  }
+  const rawCompile = fromBase64(json.compile_output);
+
+  return {
+    kind: "result",
+    result: {
+      ok: status === "success",
+      status,
+      statusText: json.status?.description ?? "Desconhecido",
+      stdout: fromBase64(json.stdout),
+      stderr: fromBase64(json.stderr),
+      compileOutput: engine.cleanCompileOutput(rawCompile),
+      diagnostics: parseDiagnostics(rawCompile, prepared),
+      time: json.time != null ? Number(json.time) : null,
+      memory: json.memory ?? null,
+      exitCode: json.exit_code ?? null,
+      wrapped: prepared.wrapped,
+      engine: engine.name,
+    },
+  };
+}
 
 export const runCSharp = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => RunInput.parse(data))
   .handler(async ({ data }): Promise<RunResult> => {
-    const prepared = prepareSource(data.code);
-    const empty = {
+    const primary = await runOn(DOTNET, data.code, data.stdin);
+    if (primary.kind === "result") return primary.result;
+
+    const fallback = await runOn(MONO, data.code, data.stdin);
+    if (fallback.kind === "result") return fallback.result;
+
+    const busy = primary.busy || fallback.busy;
+    return {
+      ok: false,
+      status: "internal-error",
+      statusText: busy ? "Compilador ocupado" : "Sem ligação ao compilador",
       stdout: "",
       stderr: "",
       compileOutput: "",
@@ -61,75 +176,9 @@ export const runCSharp = createServerFn({ method: "POST" })
       time: null,
       memory: null,
       exitCode: null,
-      wrapped: prepared.wrapped,
-    };
-
-    let res: Response;
-    try {
-      res = await fetch(ENGINE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language_id: 51,
-          source_code: toBase64(toCompilerSource(prepared.source)),
-          stdin: toBase64(data.stdin),
-          compiler_options: "-r:System.Numerics.dll",
-          cpu_time_limit: 6,
-          wall_time_limit: 12,
-        }),
-      });
-    } catch (e) {
-      console.error("run engine unreachable", e);
-      return {
-        ...empty,
-        ok: false,
-        status: "internal-error",
-        statusText: "Sem ligação ao compilador",
-        error: "Não foi possível contactar o servidor de compilação. Tente novamente dentro de instantes.",
-      };
-    }
-
-    if (!res.ok) {
-      const busy = res.status === 429 || res.status === 503;
-      console.error("run engine status", res.status, await res.text().catch(() => ""));
-      return {
-        ...empty,
-        ok: false,
-        status: "internal-error",
-        statusText: busy ? "Compilador ocupado" : "Falha no compilador",
-        error: busy
-          ? "O compilador está com muitos pedidos neste momento. Aguarde alguns segundos e execute de novo."
-          : `O servidor de compilação respondeu com erro (${res.status}).`,
-      };
-    }
-
-    const json = (await res.json()) as {
-      stdout?: string | null;
-      stderr?: string | null;
-      compile_output?: string | null;
-      message?: string | null;
-      status?: { id: number; description: string };
-      time?: string | null;
-      memory?: number | null;
-      exit_code?: number | null;
-    };
-
-    const statusId = json.status?.id ?? 13;
-    const status = classifyStatus(statusId);
-    const compileOutput = fromBase64(json.compile_output);
-    const message = fromBase64(json.message);
-
-    return {
-      ok: status === "success",
-      status,
-      statusText: json.status?.description ?? "Desconhecido",
-      stdout: fromBase64(json.stdout),
-      stderr: fromBase64(json.stderr) || (status === "internal-error" ? message : ""),
-      compileOutput,
-      diagnostics: parseDiagnostics(compileOutput, prepared),
-      time: json.time != null ? Number(json.time) : null,
-      memory: json.memory ?? null,
-      exitCode: json.exit_code ?? null,
-      wrapped: prepared.wrapped,
+      wrapped: false,
+      error: busy
+        ? "O compilador está com muitos pedidos neste momento. Aguarde alguns segundos e execute de novo."
+        : "Não foi possível contactar o servidor de compilação. Tente novamente dentro de instantes.",
     };
   });
