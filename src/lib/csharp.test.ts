@@ -3,6 +3,9 @@ import {
   classifyStatus,
   needsInput,
   parseDiagnostics,
+  parseTranscript,
+  transcriptText,
+  WAIT_MARK,
   prepareModernSource,
   prepareSource,
   stripDigitSeparators,
@@ -105,7 +108,7 @@ describe("prepareModernSource", () => {
   it("keeps the user's code intact after the implicit usings", () => {
     const code = 'string s = 5 switch { >= 5 => "a", _ => "b" };';
     const r = prepareModernSource(code);
-    expect(r.source.endsWith("#line 1\n" + code)).toBe(true);
+    expect(r.source).toContain("#line 1\n" + code + "\n");
     expect(r.source).toContain("global using System.Linq;");
   });
 });
@@ -116,5 +119,45 @@ describe("dotnet diagnostics", () => {
     const d = parseDiagnostics(`${line}\nBuild FAILED.\n${line}`, prepareModernSource("a\nb\nc\nd\ne\nf"));
     expect(d).toHaveLength(1);
     expect(d[0]).toMatchObject({ line: 6, column: 9, message: "Cannot convert" });
+  });
+});
+
+describe("console input", () => {
+  it("pauses for typed input only in interactive mode", () => {
+    expect(prepareModernSource("var n = Console.ReadLine();", { interactive: true }).source).toContain(
+      "internal const bool Interactive = true;",
+    );
+    expect(prepareModernSource("var n = Console.ReadLine();").source).toContain("internal const bool Interactive = false;");
+  });
+
+  it("seeds new Random() so replays after each typed line give the same numbers", () => {
+    const src = prepareModernSource("var r = new Random();", { seed: 77 }).source;
+    expect(src).toContain("global using Random = global::__CodexRandom;");
+    expect(src).toContain("internal const int Seed = 77;");
+  });
+
+  it("points the Random alias into a file-scoped namespace", () => {
+    const src = prepareModernSource("namespace App;\nclass P { static void Main() {} }").source;
+    expect(src).toContain("global using Random = global::App.__CodexRandom;");
+  });
+
+  it("leaves Random alone when the user declares their own", () => {
+    expect(prepareModernSource("class Random {}").source).not.toContain("global using Random");
+  });
+
+  it("shows typed input in place and detects when the program waits", () => {
+    const out = "Nome: \u0002Ana\u0003\nOlá Ana\nIdade: " + WAIT_MARK;
+    const t = parseTranscript(out);
+    expect(t.waiting).toBe(true);
+    expect(t.parts).toEqual([
+      { kind: "out", text: "Nome: " },
+      { kind: "in", text: "Ana" },
+      { kind: "out", text: "Olá Ana\nIdade: " },
+    ]);
+    expect(transcriptText(out)).toBe("Nome: Ana\nOlá Ana\nIdade: ");
+  });
+
+  it("finished programs are not waiting", () => {
+    expect(parseTranscript("Olá\n").waiting).toBe(false);
   });
 });

@@ -11,8 +11,8 @@
  */
 
 @theme inline {
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -42,6 +42,11 @@
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
   --color-panel: var(--panel);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
   --color-panel-foreground: var(--panel-foreground);
   --color-editor: var(--editor);
   --color-terminal: var(--terminal);
@@ -96,6 +101,16 @@
     0 40px 80px -30px color-mix(in oklab, black 55%, transparent),
     0 0 0 1px var(--border);
   --gradient-fade: linear-gradient(to bottom, transparent, var(--background));
+  /* Tonal surfaces (Material-style), tinted by each theme's primary colour. */
+  --surface-1: color-mix(in oklab, var(--primary) 4%, var(--card));
+  --surface-2: color-mix(in oklab, var(--primary) 8%, var(--card));
+  --surface-3: color-mix(in oklab, var(--primary) 13%, var(--card));
+  --primary-container: color-mix(in oklab, var(--primary) 20%, var(--card));
+  --on-primary-container: color-mix(in oklab, var(--primary) 62%, var(--foreground));
+  --shadow-fab: 0 6px 16px -4px color-mix(in oklab, black 45%, transparent),
+    0 2px 6px -2px color-mix(in oklab, black 30%, transparent);
+  --shadow-sheet: 0 12px 32px -8px color-mix(in oklab, black 50%, transparent),
+    0 3px 8px -3px color-mix(in oklab, black 30%, transparent);
 }
 
 :root,
@@ -337,12 +352,17 @@ html[data-theme="alucard"] {
   html.light {
     color-scheme: light;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    font-feature-settings: "ss01", "cv11";
   }
   ::selection {
     background: color-mix(in oklab, var(--primary) 35%, transparent);
@@ -374,3 +394,63 @@ html[data-theme="alucard"] {
   scrollbar-width: thin;
   scrollbar-color: var(--accent) transparent;
 }
+
+@utility shadow-fab {
+  box-shadow: var(--shadow-fab);
+}
+@utility shadow-sheet {
+  box-shadow: var(--shadow-sheet);
+}
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Code editor: a transparent textarea over a highlighted copy. Both layers
+   must share exactly the same font metrics or the caret drifts. */
+.code-font {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  letter-spacing: 0;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
+.code-hl > div {
+  height: var(--lh);
+  white-space: pre;
+}
+.code-input {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  -webkit-text-fill-color: transparent;
+}
+.code-input::selection {
+  background: color-mix(in oklab, var(--primary) 32%, transparent);
+  -webkit-text-fill-color: transparent;
+}
+.hl-error {
+  background: color-mix(in oklab, var(--destructive) 11%, transparent);
+  text-decoration: underline wavy color-mix(in oklab, var(--destructive) 85%, transparent);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 4px;
+}
+.hl-warning {
+  text-decoration: underline wavy color-mix(in oklab, var(--warning) 70%, transparent);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 4px;
+}
+.tk-k { color: var(--syn-keyword); }
+.tk-t { color: var(--syn-type); }
+.tk-f { color: var(--syn-fn); }
+.tk-s { color: var(--syn-string); }
+.tk-n { color: var(--syn-number); }
+.tk-c { color: var(--syn-comment); font-style: italic; }
+.tk-p { color: var(--syn-punct); }
+.tk-d { color: var(--syn-keyword); opacity: 0.8; }

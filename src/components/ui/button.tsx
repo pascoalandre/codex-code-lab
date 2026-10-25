@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold cursor-pointer transition-[background-color,color,box-shadow,transform] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -19,18 +19,19 @@ const buttonVariants = cva(
         hero: "bg-primary text-primary-foreground font-semibold shadow-glow hover:brightness-110 active:translate-y-px",
         run: "bg-primary text-primary-foreground font-semibold hover:brightness-110 active:translate-y-px shadow-glow",
         toolbar:
-          "text-muted-foreground hover:bg-accent hover:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-foreground",
-        subtle: "border border-border bg-card text-foreground hover:bg-accent",
+          "text-muted-foreground hover:bg-foreground/8 hover:text-foreground active:bg-foreground/12 data-[active=true]:bg-secondary data-[active=true]:text-foreground",
+        subtle: "bg-secondary text-secondary-foreground hover:bg-accent",
+        tonal: "bg-primary-container text-on-primary-container hover:brightness-110",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        xs: "h-7 rounded px-2 text-xs",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        xl: "h-12 rounded-lg px-7 text-base",
-        icon: "h-9 w-9",
-        "icon-sm": "h-8 w-8",
-        "icon-xs": "h-7 w-7 rounded",
+        default: "h-10 px-5 py-2",
+        xs: "h-8 px-3 text-xs",
+        sm: "h-9 px-4 text-[13px]",
+        lg: "h-11 px-8",
+        xl: "h-14 px-8 text-base",
+        icon: "size-11",
+        "icon-sm": "size-10",
+        "icon-xs": "size-8",
       },
     },
     defaultVariants: {
