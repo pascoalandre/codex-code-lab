@@ -10,12 +10,18 @@ import {
   type Diagnostic,
   type PreparedSource,
   type RunStatus,
+  WAIT_MARK,
 } from "./csharp";
 
 const RunInput = z.object({
   code: z.string().min(1, "O código está vazio").max(100_000, "Código demasiado grande (máx. 100 KB)"),
   stdin: z.string().max(100_000).default(""),
+  /** Pause when the program asks for a line that has not been typed yet. */
+  interactive: z.boolean().default(false),
+  seed: z.number().int().optional(),
 });
+
+type RunOptions = { interactive: boolean; seed?: number | undefined };
 
 export interface RunResult {
   ok: boolean;
@@ -29,6 +35,8 @@ export interface RunResult {
   memory: number | null;
   exitCode: number | null;
   wrapped: boolean;
+  /** The program stopped to wait for another input line (typed in the console). */
+  waitingInput?: boolean;
   /** Compiler that produced the result. */
   engine?: string;
   error?: string;
@@ -57,7 +65,7 @@ interface Engine {
   name: string;
   url: string;
   languageId: number;
-  prepare: (code: string) => PreparedSource;
+  prepare: (code: string, options: RunOptions) => PreparedSource;
   toSource: (prepared: PreparedSource) => string;
   compilerOptions?: string;
   cleanCompileOutput: (out: string) => string;
@@ -68,7 +76,7 @@ const DOTNET: Engine = {
   name: ".NET 8 · C# 12",
   url: `https://extra-ce.judge0.com/submissions?${FIELDS}`,
   languageId: 30,
-  prepare: prepareModernSource,
+  prepare: (code, o) => prepareModernSource(code, { interactive: o.interactive, ...(o.seed != null ? { seed: o.seed } : {}) }),
   toSource: (p) => p.source,
   cleanCompileOutput: cleanBuildOutput,
 };
@@ -78,7 +86,7 @@ const MONO: Engine = {
   name: "Mono · C# 7",
   url: `https://ce.judge0.com/submissions?${FIELDS}`,
   languageId: 51,
-  prepare: prepareSource,
+  prepare: (code) => prepareSource(code),
   toSource: (p) => toCompilerSource(p.source),
   compilerOptions: "-r:System.Numerics.dll",
   cleanCompileOutput: (o) => o,
@@ -99,8 +107,8 @@ interface EngineJson {
   exit_code?: number | null;
 }
 
-async function runOn(engine: Engine, code: string, stdin: string): Promise<Attempt> {
-  const prepared = engine.prepare(code);
+async function runOn(engine: Engine, code: string, stdin: string, options: RunOptions): Promise<Attempt> {
+  const prepared = engine.prepare(code, options);
   let res: Response;
   try {
     res = await fetch(engine.url, {
@@ -135,6 +143,7 @@ async function runOn(engine: Engine, code: string, stdin: string): Promise<Attem
     return { kind: "unavailable", busy: false, detail: json.status?.description ?? "internal" };
   }
   const rawCompile = fromBase64(json.compile_output);
+  const stdout = fromBase64(json.stdout);
 
   return {
     kind: "result",
@@ -142,7 +151,7 @@ async function runOn(engine: Engine, code: string, stdin: string): Promise<Attem
       ok: status === "success",
       status,
       statusText: json.status?.description ?? "Desconhecido",
-      stdout: fromBase64(json.stdout),
+      stdout,
       stderr: fromBase64(json.stderr),
       compileOutput: engine.cleanCompileOutput(rawCompile),
       diagnostics: parseDiagnostics(rawCompile, prepared),
@@ -150,6 +159,7 @@ async function runOn(engine: Engine, code: string, stdin: string): Promise<Attem
       memory: json.memory ?? null,
       exitCode: json.exit_code ?? null,
       wrapped: prepared.wrapped,
+      waitingInput: status === "success" && stdout.includes(WAIT_MARK),
       engine: engine.name,
     },
   };
@@ -158,10 +168,11 @@ async function runOn(engine: Engine, code: string, stdin: string): Promise<Attem
 export const runCSharp = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => RunInput.parse(data))
   .handler(async ({ data }): Promise<RunResult> => {
-    const primary = await runOn(DOTNET, data.code, data.stdin);
+    const options: RunOptions = { interactive: data.interactive, seed: data.seed };
+    const primary = await runOn(DOTNET, data.code, data.stdin, options);
     if (primary.kind === "result") return primary.result;
 
-    const fallback = await runOn(MONO, data.code, data.stdin);
+    const fallback = await runOn(MONO, data.code, data.stdin, options);
     if (fallback.kind === "result") return fallback.result;
 
     const busy = primary.busy || fallback.busy;
