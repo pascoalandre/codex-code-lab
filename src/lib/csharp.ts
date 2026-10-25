@@ -243,28 +243,144 @@ export function parseDiagnostics(
   return result;
 }
 
+/** Printed by the program when it needs another input line (console waits). */
+export const WAIT_MARK = "\u0001WAIT\u0001";
+const ECHO_START = "\u0002";
+const ECHO_END = "\u0003";
+
+export interface ModernOptions {
+  /** Pause (print WAIT_MARK and exit) when input runs out, instead of returning null. */
+  interactive?: boolean;
+  /** Seed for `new Random()` so replays with more input behave the same. */
+  seed?: number;
+}
+
+/**
+ * Console helper appended after the user's code. It echoes every line read so
+ * the console can show typed input in place, and in interactive mode it pauses
+ * the program when it asks for a line that has not been typed yet.
+ */
+function stdinHelper(interactive: boolean, seed: number): string {
+  return String.raw`
+#line hidden
+#nullable disable
+internal static class __CodexIO
+{
+    internal const bool Interactive = ${interactive ? "true" : "false"};
+    internal const int Seed = ${seed | 0};
+    internal static int Count;
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Init() { System.Console.SetIn(new __CodexReader(System.Console.In)); }
+}
+internal sealed class __CodexReader : System.IO.TextReader
+{
+    private readonly System.IO.TextReader _in;
+    public __CodexReader(System.IO.TextReader inner) { _in = inner; }
+    public override int Peek() => _in.Peek();
+    public override int Read() => _in.Read();
+    public override int Read(char[] buffer, int index, int count) => _in.Read(buffer, index, count);
+    public override string ReadToEnd() => _in.ReadToEnd();
+    public override string ReadLine()
+    {
+        var s = _in.ReadLine();
+        if (s == null)
+        {
+            if (__CodexIO.Interactive)
+            {
+                System.Console.Out.Write("\u0001WAIT\u0001");
+                System.Console.Out.Flush();
+                System.Environment.Exit(0);
+            }
+            return null;
+        }
+        System.Console.Out.Write("\u0002" + s + "\u0003\n");
+        return s;
+    }
+}
+internal class __CodexRandom : System.Random
+{
+    public __CodexRandom() : base(unchecked(__CodexIO.Seed + 7919 * __CodexIO.Count++)) { }
+    public __CodexRandom(int seed) : base(seed) { }
+    public static new __CodexRandom Shared { get; } = new __CodexRandom();
+}
+`;
+}
+
+const FILE_NAMESPACE_RE = /^\s*namespace\s+([\w.]+)\s*;/m;
+const OWN_RANDOM_RE = /\b(?:class|struct|record|interface|enum)\s+Random\b|using\s+Random\s*=/;
+
 /**
  * Prepares source for the modern .NET compiler (C# 12). It understands
  * top-level statements, switch expressions, records and patterns natively, so
  * only the implicit usings are added; `#line 1` keeps diagnostics on the
- * user's own line numbers.
+ * user's own line numbers. A console helper is appended after the code.
  */
-export function prepareModernSource(code: string): PreparedSource {
+export function prepareModernSource(code: string, options: ModernOptions = {}): PreparedSource {
   const normalized = code.replace(/\r\n?/g, "\n");
+  const ns = stripComments(normalized).match(FILE_NAMESPACE_RE)?.[1];
+  const helperPrefix = ns ? `global::${ns}.` : "global::";
   const header = [
     ...IMPLICIT_USINGS.map((u) => `global using ${u};`),
     "global using System.Numerics;",
+    ...(OWN_RANDOM_RE.test(normalized) ? [] : [`global using Random = ${helperPrefix}__CodexRandom;`]),
     "#nullable enable annotations",
     "#pragma warning disable CS0105, CS8019",
     "#line 1",
   ];
+  const seed = options.seed ?? 20240611;
   return {
-    source: header.join("\n") + "\n" + normalized,
+    source: header.join("\n") + "\n" + normalized + "\n" + stdinHelper(!!options.interactive, seed),
     wrapped: false,
     lineMap: [],
     columnShift: {},
     lineCount: normalized.split("\n").length,
   };
+}
+
+export interface TranscriptPart {
+  kind: "out" | "in";
+  text: string;
+}
+
+/**
+ * Splits program output into printed text and the input lines it read, and
+ * tells whether the program is waiting for another line.
+ */
+export function parseTranscript(stdout: string): { parts: TranscriptPart[]; waiting: boolean } {
+  const waiting = stdout.includes(WAIT_MARK);
+  const clean = stdout.split(WAIT_MARK).join("");
+  const parts: TranscriptPart[] = [];
+  const push = (kind: TranscriptPart["kind"], text: string) => {
+    if (!text && kind === "out") return;
+    const last = parts.at(-1);
+    if (last && last.kind === "out" && kind === "out") last.text += text;
+    else parts.push({ kind, text });
+  };
+  let i = 0;
+  while (i < clean.length) {
+    const s = clean.indexOf(ECHO_START, i);
+    if (s === -1) {
+      push("out", clean.slice(i));
+      break;
+    }
+    const e = clean.indexOf(ECHO_END, s + 1);
+    if (e === -1) {
+      push("out", clean.slice(i));
+      break;
+    }
+    push("out", clean.slice(i, s));
+    push("in", clean.slice(s + 1, e));
+    i = e + 1;
+    if (clean[i] === "\n") i++;
+  }
+  return { parts, waiting };
+}
+
+/** Output as plain text, with typed input on its own line (for copying). */
+export function transcriptText(stdout: string): string {
+  return parseTranscript(stdout)
+    .parts.map((p) => (p.kind === "in" ? p.text + "\n" : p.text))
+    .join("");
 }
 
 /** Removes the dotnet build noise around the real compiler messages. */
