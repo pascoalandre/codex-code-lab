@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Logo } from "@/components/brand/Logo";
-import { ModeToggle, ThemePicker } from "@/components/ThemePicker";
+import { AppShell, fabClass } from "@/components/app/AppShell";
+import { ThemePicker } from "@/components/ThemePicker";
 import { UserMenu } from "@/components/UserMenu";
 import {
   AlertDialog,
@@ -117,74 +117,60 @@ function ProjectsPage() {
   const totalLines = projects.reduce((n, p) => n + p.code.split("\n").length, 0);
 
   return (
-    <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Logo />
-          <nav className="ml-4 hidden items-center gap-1 text-sm md:flex">
-            <span className="rounded px-2.5 py-1.5 font-medium text-foreground">Projectos</span>
-            <Link to="/playground" className="rounded px-2.5 py-1.5 text-muted-foreground hover:text-foreground">
-              Playground
-            </Link>
-          </nav>
-          <div className="ml-auto flex items-center gap-1">
-            <ThemePicker />
-            <ModeToggle />
-            <div className="ml-1">
-              <UserMenu />
-            </div>
+    <AppShell
+      active="projects"
+      title="Projectos"
+      actions={
+        <div className="flex items-center gap-0.5 md:hidden">
+          <ThemePicker />
+          <div className="ml-1 mr-1">
+            <UserMenu compact />
           </div>
         </div>
-      </header>
+      }
+      fab={
+        <button onClick={() => setNewOpen(true)} className={fabClass}>
+          <Plus /> Novo projecto
+        </button>
+      }
+    >
+      <div className="mx-auto max-w-5xl px-4 md:px-6">
+        <p className="px-1 text-sm text-muted-foreground">
+          Olá, <span className="font-semibold text-foreground">{displayNameOf(user).split(" ")[0]}</span> · {projects.length} projecto(s) ·{" "}
+          {totalLines.toLocaleString("pt-PT")} linhas de C#
+        </p>
 
-      <main className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6 sm:pt-12">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="label-mono text-primary">// olá, {displayNameOf(user).split(" ")[0]}</p>
-            <h1 className="mt-2 text-3xl font-semibold text-balance-tight sm:text-4xl">Os seus projectos</h1>
-            <p className="mt-2 font-mono text-xs text-muted-foreground">
-              {projects.length} projecto(s) · {totalLines.toLocaleString("pt-PT")} linhas de C#
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild variant="subtle">
-              <Link to="/playground">
-                <SquareTerminal /> Playground
-              </Link>
-            </Button>
-            <Button variant="hero" onClick={() => setNewOpen(true)}>
-              <Plus /> Novo projecto
-            </Button>
-          </div>
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Procurar por nome ou código"
+            className="h-14 w-full rounded-full bg-surface-2 pl-12 pr-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
+          />
         </div>
-
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Procurar por nome ou código…"
-              className="h-10 pl-9"
-            />
-          </div>
-          <div className="inline-flex rounded-md border border-border p-0.5">
-            {(
-              [
-                ["all", "Todos"],
-                ["favorites", "Favoritos"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setFilter(id)}
-                data-active={filter === id}
-                className="rounded px-3 py-1.5 text-sm text-muted-foreground transition data-[active=true]:bg-accent data-[active=true]:text-foreground"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="mt-3 flex gap-2">
+          {(
+            [
+              ["all", "Todos"],
+              ["favorites", "Favoritos"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setFilter(id)}
+              data-active={filter === id}
+              className="h-9 rounded-xl border border-border px-4 text-[13px] font-medium text-muted-foreground transition-colors data-[active=true]:border-transparent data-[active=true]:bg-primary-container data-[active=true]:text-on-primary-container"
+            >
+              {label}
+            </button>
+          ))}
+          <Link
+            to="/playground"
+            className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold text-primary hover:bg-primary/10"
+          >
+            <SquareTerminal className="size-4" /> Rascunho rápido
+          </Link>
         </div>
 
         {projects.length === 0 ? (
@@ -192,7 +178,7 @@ function ProjectsPage() {
         ) : list.length === 0 ? (
           <p className="py-20 text-center text-sm text-muted-foreground">Nenhum projecto corresponde à pesquisa.</p>
         ) : (
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
             {list.map((p, i) => (
               <li key={p.id} className="animate-rise" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
                 <ProjectCard
@@ -206,7 +192,7 @@ function ProjectsPage() {
             ))}
           </ul>
         )}
-      </main>
+      </div>
 
       <NewProjectDialog
         open={newOpen}
@@ -250,7 +236,7 @@ function ProjectsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </AppShell>
   );
 }
 
@@ -275,17 +261,19 @@ function ProjectCard({
   const lines = p.code.split("\n").length;
 
   return (
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card transition hover:-translate-y-0.5 hover:border-primary/50">
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-[24px] bg-surface-1 transition hover:bg-surface-2 active:scale-[0.99]">
       <Link to="/projects/$projectId" params={{ projectId: p.id }} className="absolute inset-0 z-0" aria-label={`Abrir ${p.name}`} />
-      <div className="pointer-events-none relative h-32 overflow-hidden border-b border-border bg-editor px-4 py-3">
-        <pre className="font-mono text-[11px] leading-[1.6] text-syn-punct/80">{preview}</pre>
+      <div className="pointer-events-none relative m-2 mb-0 hidden h-28 overflow-hidden rounded-[18px] bg-editor px-4 py-3 ring-1 ring-border/50 sm:block">
+        <pre className="code-font text-[11px] leading-[1.6] text-syn-punct/80">{preview}</pre>
         <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-editor to-transparent" />
       </div>
-      <div className="relative flex flex-1 items-start gap-3 p-4">
-        <FileCode2 className="mt-0.5 size-4 shrink-0 text-syn-keyword" />
+      <div className="relative flex flex-1 items-center gap-3 p-3 sm:px-4">
+        <span className="code-font flex size-11 shrink-0 items-center justify-center rounded-2xl bg-editor text-[13px] font-bold text-syn-keyword ring-1 ring-border/60 sm:hidden">
+          C#
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold tracking-tight">{p.name}</p>
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {lines} linhas · {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true, locale: pt })}
           </p>
         </div>
@@ -293,14 +281,14 @@ function ProjectCard({
           <button
             onClick={onFav}
             aria-label={p.is_favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-            className="rounded p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/8 hover:text-foreground"
           >
-            <Star className={cn("size-4", p.is_favorite && "fill-warning text-warning")} />
+            <Star className={cn("size-5", p.is_favorite && "fill-warning text-warning")} />
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button aria-label="Opções" className="rounded p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground">
-                <MoreVertical className="size-4" />
+              <button aria-label="Opções" className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/8 hover:text-foreground">
+                <MoreVertical className="size-5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -324,8 +312,8 @@ function ProjectCard({
 
 function EmptyState({ onNew }: { onNew: () => void }) {
   return (
-    <div className="mt-8 flex flex-col items-center rounded-xl border border-dashed border-border bg-panel px-6 py-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-lg border border-border bg-card font-mono text-sm font-bold text-primary">
+    <div className="mt-6 flex flex-col items-center rounded-[28px] bg-surface-1 px-6 py-14 text-center">
+      <div className="code-font flex size-16 items-center justify-center rounded-[22px] bg-primary-container text-base font-bold text-on-primary-container">
         {"{ }"}
       </div>
       <h2 className="mt-5 text-lg font-semibold tracking-tight">Ainda não tem projectos</h2>
@@ -433,7 +421,7 @@ function TemplateOption({
       type="button"
       onClick={() => onSelect(id)}
       data-active={selected === id}
-      className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-left transition hover:bg-accent/60 data-[active=true]:border-primary data-[active=true]:bg-primary/10"
+      className="flex items-center gap-3 rounded-2xl border border-transparent bg-surface-1 px-3 py-2.5 text-left transition hover:bg-surface-2 data-[active=true]:border-primary data-[active=true]:bg-primary-container"
     >
       <span className="text-muted-foreground">{icon}</span>
       <span className="min-w-0 flex-1">
