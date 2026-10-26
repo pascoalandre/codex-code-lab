@@ -1,4 +1,4 @@
-import { CircleCheck, CircleX, Clock, Copy, Cpu, CornerDownLeft, Lightbulb, Loader2, RotateCcw, Square, SquareTerminal, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Clock, Copy, Cpu, CornerDownLeft, Lightbulb, Loader2, Play, RotateCcw, Square, SquareTerminal, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseTranscript, STATUS_LABEL, transcriptText, type Diagnostic } from "@/lib/csharp";
@@ -58,9 +58,15 @@ export function Console({ result, running, pendingEcho, stopped, onSubmit, onSto
         <div>
           <p className="text-base font-semibold text-foreground">Consola pronta</p>
           <p className="mx-auto mt-1 max-w-64 text-sm text-muted-foreground">
-            Toque em <span className="font-semibold text-foreground">Executar</span>. Quando o programa pedir dados, escreve-os aqui mesmo.
+            Quando o programa pedir dados, escreva-os aqui mesmo, como num terminal.
           </p>
         </div>
+        <button
+          onClick={onRerun}
+          className="inline-flex h-12 items-center gap-2 rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-fab active:scale-95"
+        >
+          <Play className="size-4 fill-current" /> Executar programa
+        </button>
       </div>
     );
   }

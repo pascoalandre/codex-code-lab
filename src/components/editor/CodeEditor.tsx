@@ -1,4 +1,3 @@
-import { ClipboardPaste, Copy, Scissors, TextSelect } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Diagnostic } from "@/lib/csharp";
@@ -504,12 +503,12 @@ function SelectionMenu({
   const items = [
     ...(hasSelection
       ? ([
-          ["cut", "Cortar", Scissors],
-          ["copy", "Copiar", Copy],
+          ["cut", "Cortar"],
+          ["copy", "Copiar"],
         ] as const)
       : []),
-    ["paste", "Colar", ClipboardPaste],
-    ["selectAll", "Selecionar tudo", TextSelect],
+    ["paste", "Colar"],
+    ["selectAll", "Selecionar tudo"],
   ] as const;
 
   return (
