@@ -49,7 +49,7 @@ function ProjectEditor() {
 
   const [name, setName] = useState(project?.name ?? "");
   const [code, setCode] = useState(project?.code ?? "");
-  const [stdin, setStdin] = useState(project?.stdin ?? "");
+  const stdin = project?.stdin ?? "";
   const [state, setState] = useState<SaveState>("saved");
 
   const latest = useRef({ code, stdin });
