@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, CloudOff, Loader2 } from "lucide-react";
+import { Check, CloudOff, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Workspace } from "@/components/editor/Workspace";
@@ -49,7 +49,7 @@ function ProjectEditor() {
 
   const [name, setName] = useState(project?.name ?? "");
   const [code, setCode] = useState(project?.code ?? "");
-  const [stdin, setStdin] = useState(project?.stdin ?? "");
+  const stdin = project?.stdin ?? "";
   const [state, setState] = useState<SaveState>("saved");
 
   const latest = useRef({ code, stdin });
@@ -134,19 +134,12 @@ function ProjectEditor() {
       onRename={rename}
       code={code}
       onCodeChange={setCode}
-      stdin={stdin}
-      onStdinChange={setStdin}
       onSave={() => {
         save();
       }}
       saveStatus={status}
       dirty={state === "dirty" || state === "error"}
-      breadcrumb={
-        <Link to="/projects" className="inline-flex items-center gap-1 rounded px-1.5 py-1 hover:bg-accent hover:text-foreground">
-          <ChevronLeft className="size-4" /> Projectos
-          <span className="ml-1 text-border">/</span>
-        </Link>
-      }
+      backTo="/projects"
     />
   );
 }

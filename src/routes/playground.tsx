@@ -34,7 +34,6 @@ function Playground() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [code, setCode] = useState(DEFAULT_CODE);
-  const [stdin, setStdin] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [saving, setSaving] = useState(false);
   const loadedExample = useRef<string | null>(null);
@@ -45,14 +44,12 @@ function Playground() {
     if (ex && loadedExample.current !== ex.id) {
       loadedExample.current = ex.id;
       setCode(ex.code);
-      setStdin(ex.stdin ?? "");
     } else if (!hydrated) {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const d = JSON.parse(raw) as { code?: string; stdin?: string };
+          const d = JSON.parse(raw) as { code?: string };
           if (d.code) setCode(d.code);
-          if (typeof d.stdin === "string") setStdin(d.stdin);
         }
       } catch {
         /* ignore */
@@ -66,13 +63,13 @@ function Playground() {
     if (!hydrated) return;
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ code, stdin }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ code }));
       } catch {
         /* ignore */
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [code, stdin, hydrated]);
+  }, [code, hydrated]);
 
   const saveToCloud = async () => {
     if (!user) {
@@ -85,7 +82,7 @@ function Playground() {
     setSaving(true);
     try {
       const firstComment = code.match(/^\s*\/\/\s*(.{3,60})$/m)?.[1];
-      const p = await createProject({ name: firstComment ?? "Novo projecto", code, stdin });
+      const p = await createProject({ name: firstComment ?? "Novo projecto", code });
       toast.success("Projecto guardado na nuvem");
       navigate({ to: "/projects/$projectId", params: { projectId: p.id } });
     } catch (e) {
@@ -100,12 +97,10 @@ function Playground() {
       fileName="Playground"
       code={code}
       onCodeChange={setCode}
-      stdin={stdin}
-      onStdinChange={setStdin}
       onSave={() => toast("Rascunho guardado neste navegador", { description: "Use “Guardar” para o enviar para a nuvem." })}
       saveStatus="Rascunho local"
       actions={
-        <Button variant="subtle" size="sm" onClick={saveToCloud} disabled={saving} className="h-8">
+        <Button variant="toolbar" size="sm" onClick={saveToCloud} disabled={saving} aria-label="Guardar na nuvem" className="max-md:size-10 max-md:px-0">
           {saving ? <Loader2 className="animate-spin" /> : <CloudUpload />}
           <span className="hidden md:inline">Guardar</span>
         </Button>

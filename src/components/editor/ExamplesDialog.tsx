@@ -33,29 +33,29 @@ export function ExamplesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[88dvh] w-[calc(100vw-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b border-border p-5 pb-4 text-left">
-          <p className="label-mono text-primary">Biblioteca</p>
-          <DialogTitle className="text-xl tracking-tight">Exemplos prontos a executar</DialogTitle>
+      <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:data-[state=open]:slide-in-from-bottom-10">
+        <div className="mx-auto mt-3 h-1 w-8 rounded-full bg-muted-foreground/40 sm:hidden" />
+        <DialogHeader className="p-5 pb-3 text-left">
+          <DialogTitle className="text-[22px] font-semibold tracking-tight">Exemplos prontos</DialogTitle>
           <DialogDescription>
             {EXAMPLES.length} programas comentados — de "Olá, Mundo" a sistemas lineares e matrizes inversas.
           </DialogDescription>
           <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Procurar exemplo…"
-              className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
+              className="h-12 w-full rounded-full bg-surface-2 pl-11 pr-4 text-[15px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
             />
           </div>
-          <div className="-mx-5 mt-3 flex gap-1.5 overflow-x-auto px-5 pb-1 scrollbar-thin">
+          <div className="no-scrollbar -mx-5 mt-3 flex gap-2 overflow-x-auto px-5 pb-1">
             {(["Todos", ...CATEGORIES] as const).map((c) => (
               <button
                 key={c}
                 onClick={() => setCategory(c)}
                 data-active={category === c}
-                className="shrink-0 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground data-[active=true]:border-primary data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                className="h-8 shrink-0 rounded-lg border border-border px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground data-[active=true]:border-transparent data-[active=true]:bg-primary-container data-[active=true]:text-on-primary-container"
               >
                 {c}
               </button>
@@ -63,12 +63,12 @@ export function ExamplesDialog({
           </div>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto p-5 scrollbar-thin sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto px-3 pb-5 pt-1 scrollbar-thin sm:grid-cols-2 sm:px-5">
           {list.map((ex) => (
             <button
               key={ex.id}
               onClick={() => onPick(ex)}
-              className="group flex flex-col rounded-lg border border-border bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/60"
+              className="group flex flex-col rounded-[20px] bg-surface-1 p-4 text-left transition hover:bg-surface-2 active:scale-[0.99]"
             >
               <div className="flex items-center gap-2">
                 <span className="label-mono text-muted-foreground">{ex.category}</span>

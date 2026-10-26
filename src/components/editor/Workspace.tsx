@@ -1,22 +1,33 @@
-import { ClientOnly } from "@tanstack/react-router";
+import { ClientOnly, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
+  ArrowLeft,
+  ArrowDown,
+  ArrowLeftIcon,
+  ArrowRight,
+  ArrowUp,
   BookOpen,
+  Bug,
+  ChevronDown,
+  Code2,
   Columns2,
   Copy,
   Download,
-  FileCode2,
   Keyboard,
   Loader2,
   Maximize2,
   Minimize2,
-  MoreHorizontal,
+  Minus,
+  MoreVertical,
   Play,
+  Plus,
+  Redo2,
   Rows2,
-  Settings2,
+  SquareTerminal,
+  Undo2,
   Upload,
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,38 +35,32 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModeToggle, ThemePicker } from "@/components/ThemePicker";
-import { UserMenu } from "@/components/UserMenu";
-import { LogoMark } from "@/components/brand/Logo";
+import { NavRail } from "@/components/app/AppShell";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useTheme } from "@/hooks/use-theme";
-import { countInputCalls, needsInput, STATUS_LABEL, type Diagnostic } from "@/lib/csharp";
+import type { Diagnostic } from "@/lib/csharp";
 import type { Example } from "@/lib/examples";
 import { runCSharp, type RunResult } from "@/lib/run.functions";
 import { cn } from "@/lib/utils";
-import type { CodeEditorHandle } from "./CodeEditor";
+import type { CodeEditorHandle, EditorKey } from "./CodeEditor";
+import { Console, Kbd, ProblemsList } from "./ConsolePanel";
 import { EditorSkeleton } from "./EditorSkeleton";
 import { ExamplesDialog } from "./ExamplesDialog";
-import { InputDialog } from "./InputDialog";
-import { Kbd, OutputPanel, type PanelTab } from "./OutputPanel";
-import { Link } from "@tanstack/react-router";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
 interface Prefs {
   fontSize: number;
-  minimap: boolean;
   layout: "horizontal" | "vertical";
 }
-const PREFS_KEY = "codex-editor-prefs-v2";
-const DEFAULT_PREFS: Prefs = { fontSize: 14, minimap: true, layout: "horizontal" };
+const PREFS_KEY = "codex-editor-prefs-v3";
+const DEFAULT_PREFS: Prefs = { fontSize: 14, layout: "horizontal" };
 
 function usePrefs() {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -81,39 +86,50 @@ function usePrefs() {
   return [prefs, update] as const;
 }
 
+/** True while the on-screen keyboard is up (visible area much shorter than usual). */
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let max = vv.height;
+    let width = vv.width;
+    const on = () => {
+      if (Math.abs(vv.width - width) > 60) {
+        width = vv.width;
+        max = vv.height;
+      }
+      max = Math.max(max, vv.height);
+      setOpen(max - vv.height > 140);
+    };
+    on();
+    vv.addEventListener("resize", on);
+    return () => vv.removeEventListener("resize", on);
+  }, []);
+  return open;
+}
+
 export interface WorkspaceProps {
   fileName: string;
   onRename?: (name: string) => void;
   code: string;
   onCodeChange: (code: string) => void;
-  stdin: string;
-  onStdinChange: (stdin: string) => void;
   onSave: () => void;
   /** Small status element: "Guardado", "A guardar…" */
   saveStatus: ReactNode;
-  /** Extra action buttons placed before Run (e.g. "Guardar na nuvem"). */
+  /** Extra action buttons in the top bar (e.g. "Guardar na nuvem"). */
   actions?: ReactNode;
-  /** Breadcrumb element placed after the logo (e.g. link back to projects). */
-  breadcrumb?: ReactNode;
+  /** Where the back arrow goes. */
+  backTo?: "/" | "/projects";
   dirty?: boolean;
 }
 
-export function Workspace({
-  fileName,
-  onRename,
-  code,
-  onCodeChange,
-  stdin,
-  onStdinChange,
-  onSave,
-  saveStatus,
-  actions,
-  breadcrumb,
-  dirty,
-}: WorkspaceProps) {
+type View = "code" | "console" | "problems";
+
+export function Workspace({ fileName, onRename, code, onCodeChange, onSave, saveStatus, actions, backTo = "/", dirty }: WorkspaceProps) {
   const run = useServerFn(runCSharp);
   const isMobile = useIsMobile();
-  const { theme } = useTheme();
+  const keyboardOpen = useKeyboardOpen();
   const [prefs, setPrefs] = usePrefs();
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -122,45 +138,45 @@ export function Workspace({
 
   const [result, setResult] = useState<RunResult | null>(null);
   const [running, setRunning] = useState(false);
-  const [panelTab, setPanelTab] = useState<PanelTab>("output");
-  const [mobileView, setMobileView] = useState<"code" | "input" | "output">("code");
+  const [inputs, setInputs] = useState<string[]>([]);
+  const [pendingEcho, setPendingEcho] = useState<string | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const [view, setView] = useState<View>("code");
+  const [sideTab, setSideTab] = useState<"console" | "problems">("console");
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const [editorFocused, setEditorFocused] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const [inputOpen, setInputOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [nativeFs, setNativeFs] = useState(false);
   const [cssFs, setCssFs] = useState(false);
   const [editingName, setEditingName] = useState(false);
 
   const fullscreen = nativeFs || cssFs;
-  const inputCalls = useMemo(() => countInputCalls(code), [code]);
   const diagnostics = result?.diagnostics ?? [];
+  const errorsCount = diagnostics.filter((d) => d.severity === "error").length;
 
   const codeRef = useRef(code);
-  const stdinRef = useRef(stdin);
   codeRef.current = code;
-  stdinRef.current = stdin;
+  const runningRef = useRef(false);
+  /** Code and random seed of the current run, reused when more input is typed. */
+  const session = useRef<{ code: string; seed: number }>({ code: "", seed: 0 });
 
   const execute = useCallback(
-    async (stdinOverride?: string) => {
-      if (running) return;
-      const currentCode = codeRef.current;
-      const input = stdinOverride ?? stdinRef.current;
-      if (!currentCode.trim()) {
-        toast.error("O editor está vazio.");
-        return;
-      }
-      if (stdinOverride === undefined && needsInput(currentCode) && !input.trim()) {
-        setInputOpen(true);
-        return;
-      }
+    async (lines: string[]) => {
+      if (runningRef.current) return;
+      runningRef.current = true;
       setRunning(true);
-      setPanelTab("output");
-      setMobileView("output");
       try {
-        const r = await run({ data: { code: currentCode, stdin: input } });
+        const r = await run({
+          data: {
+            code: session.current.code,
+            stdin: lines.map((l) => l + "\n").join(""),
+            interactive: true,
+            seed: session.current.seed,
+          },
+        });
         setResult(r);
-        if (r.status === "compile-error" && r.diagnostics.length) setPanelTab("problems");
+        if (r.status === "compile-error" && r.diagnostics.length) setSideTab("problems");
       } catch (e) {
         setResult({
           ok: false,
@@ -177,11 +193,36 @@ export function Workspace({
           error: e instanceof Error ? e.message : "Falha inesperada ao executar.",
         });
       } finally {
+        runningRef.current = false;
         setRunning(false);
+        setPendingEcho(null);
       }
     },
-    [run, running],
+    [run],
   );
+
+  const start = useCallback(() => {
+    if (runningRef.current) return;
+    if (!codeRef.current.trim()) {
+      toast.error("O editor está vazio.");
+      return;
+    }
+    session.current = { code: codeRef.current, seed: Math.floor(Math.random() * 1_000_000_000) };
+    setInputs([]);
+    setResult(null);
+    setStopped(false);
+    setSideTab("console");
+    setView("console");
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    execute([]);
+  }, [execute]);
+
+  const submitLine = (text: string) => {
+    const next = [...inputs, ...text.replace(/\r\n?/g, "\n").split("\n")];
+    setInputs(next);
+    setPendingEcho(text);
+    execute(next);
+  };
 
   const toggleFullscreen = useCallback(async () => {
     if (fullscreen) {
@@ -216,39 +257,30 @@ export function Workspace({
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         onSave();
-      } else if (mod && e.key === "Enter") {
+      } else if ((mod && e.key === "Enter") || e.key === "F5") {
         e.preventDefault();
-        execute();
+        start();
       } else if (e.key === "Escape" && cssFs) {
         setCssFs(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleFullscreen, onSave, execute, cssFs]);
+  }, [toggleFullscreen, onSave, start, cssFs]);
 
   const reveal = (d: Diagnostic) => {
-    setMobileView("code");
-    setTimeout(() => editorHandle.current?.revealPosition(d.line, d.column), 30);
+    setView("code");
+    setTimeout(() => editorHandle.current?.revealPosition(d.line, d.column), 40);
   };
 
   const pickExample = (ex: Example) => {
     const prevCode = code;
-    const prevStdin = stdin;
     onCodeChange(ex.code);
-    onStdinChange(ex.stdin ?? "");
     setResult(null);
     setExamplesOpen(false);
-    setMobileView("code");
+    setView("code");
     toast.success(`Exemplo carregado: ${ex.title}`, {
-      description: ex.stdin ? "Os dados de entrada já foram preenchidos." : undefined,
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          onCodeChange(prevCode);
-          onStdinChange(prevStdin);
-        },
-      },
+      action: { label: "Desfazer", onClick: () => onCodeChange(prevCode) },
     });
   };
 
@@ -276,326 +308,442 @@ export function Workspace({
     toast.success("Código copiado");
   };
 
+  const waiting = !!result?.waitingInput && !stopped;
+
   const editor = (
-    <div className="flex h-full min-h-0 flex-col bg-editor">
-      <div className="flex h-10 shrink-0 items-center border-b border-border bg-panel">
-        <div className="flex h-full items-center gap-2 border-r border-border bg-editor px-3 text-xs text-foreground">
-          <FileCode2 className="size-3.5 text-syn-keyword" />
-          <span className="font-mono">Program.cs</span>
-          {dirty && <span className="size-1.5 rounded-full bg-foreground/70" aria-label="Alterações por guardar" />}
-        </div>
-        <div className="ml-auto flex items-center gap-0.5 px-2">
-          <EditorSettings prefs={prefs} setPrefs={setPrefs} />
-          {!isMobile && (
+    <div className="h-full min-h-0">
+      <ClientOnly fallback={<EditorSkeleton />}>
+        <Suspense fallback={<EditorSkeleton />}>
+          <CodeEditor
+            value={code}
+            onChange={onCodeChange}
+            fontSize={prefs.fontSize}
+            compact={isMobile}
+            diagnostics={diagnostics}
+            onCursorChange={(line, column) => setCursor({ line, column })}
+            onFocusChange={setEditorFocused}
+            handleRef={editorHandle}
+          />
+        </Suspense>
+      </ClientOnly>
+    </div>
+  );
+
+  const consoleEl = (visible: boolean) => (
+    <Console
+      result={result}
+      running={running}
+      pendingEcho={pendingEcho}
+      stopped={stopped}
+      onSubmit={submitLine}
+      onStop={() => setStopped(true)}
+      onRerun={start}
+      onReveal={reveal}
+      visible={visible}
+    />
+  );
+
+  const titleBlock = (
+    <div className="min-w-0 flex-1">
+      {editingName && onRename ? (
+        <input
+          autoFocus
+          defaultValue={fileName}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v && v !== fileName) onRename(v);
+            setEditingName(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") setEditingName(false);
+          }}
+          className="h-10 w-full max-w-80 rounded-xl border border-primary bg-surface-1 px-3 text-base font-semibold outline-none"
+        />
+      ) : (
+        <button
+          onClick={() => onRename && setEditingName(true)}
+          className={cn("block min-w-0 max-w-full rounded-xl px-2 py-1 text-left", onRename && "hover:bg-foreground/5")}
+          title={onRename ? "Mudar o nome" : undefined}
+        >
+          <span className="flex items-center gap-2">
+            <span className="truncate text-[17px] font-semibold leading-tight tracking-tight">{fileName}</span>
+            {dirty && <span className="size-2 shrink-0 rounded-full bg-warning" aria-label="Alterações por guardar" />}
+          </span>
+          <span className="block truncate text-xs leading-tight text-muted-foreground">{saveStatus}</span>
+        </button>
+      )}
+    </div>
+  );
+
+  const moreMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="toolbar" size="icon-sm" aria-label="Mais opções">
+          <MoreVertical />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuItem onSelect={() => setExamplesOpen(true)}>
+          <BookOpen /> Exemplos prontos
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={toggleFullscreen}>
+          {fullscreen ? <Minimize2 /> : <Maximize2 />} {fullscreen ? "Sair do ecrã inteiro" : "Ecrã inteiro"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+          Tamanho da letra
+          <span className="flex items-center gap-1">
+            <button
+              className="flex size-8 items-center justify-center rounded-full hover:bg-foreground/8"
+              onClick={() => setPrefs({ fontSize: Math.max(10, prefs.fontSize - 1) })}
+              aria-label="Diminuir letra"
+            >
+              <Minus className="size-4" />
+            </button>
+            <span className="w-6 text-center font-mono text-sm text-foreground">{prefs.fontSize}</span>
+            <button
+              className="flex size-8 items-center justify-center rounded-full hover:bg-foreground/8"
+              onClick={() => setPrefs({ fontSize: Math.min(26, prefs.fontSize + 1) })}
+              aria-label="Aumentar letra"
+            >
+              <Plus className="size-4" />
+            </button>
+          </span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={download}>
+          <Download /> Descarregar .cs
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+          <Upload /> Abrir ficheiro .cs
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={copy}>
+          <Copy /> Copiar código
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setShortcutsOpen(true)} className="max-md:hidden">
+          <Keyboard /> Atalhos do teclado
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const backButton = (
+    <Button asChild variant="toolbar" size="icon-sm" className="shrink-0 text-foreground">
+      <Link to={backTo} aria-label="Voltar">
+        <ArrowLeft className="size-[22px]" />
+      </Link>
+    </Button>
+  );
+
+  const runLabel = running ? (waiting || pendingEcho !== null ? "A continuar" : "A executar") : "Executar";
+
+  const hidden = {
+    rest: (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".cs,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) upload(f);
+            e.target.value = "";
+          }}
+        />
+        <ExamplesDialog open={examplesOpen} onOpenChange={setExamplesOpen} onPick={pickExample} />
+        <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      </>
+    ),
+  };
+
+  /* ---------------------------------- Phone ---------------------------------- */
+  if (isMobile) {
+    const showKeys = view === "code" && editorFocused;
+    return (
+      <div ref={rootRef} className={cn("flex h-dvh flex-col overflow-hidden bg-background text-foreground", cssFs && "fixed inset-0 z-50")}>
+        {!(fullscreen && view === "code" && editorFocused) && (
+          <header className="flex h-16 shrink-0 items-center gap-0.5 bg-surface-2 px-1">
+            {backButton}
+            {titleBlock}
+            {actions}
+            <Button variant="toolbar" size="icon-sm" onClick={() => setExamplesOpen(true)} aria-label="Exemplos">
+              <BookOpen />
+            </Button>
+            <ThemePicker />
+            {moreMenu}
+          </header>
+        )}
+
+        <main className="relative min-h-0 flex-1">
+          <div className={cn("absolute inset-0", view === "code" ? "block" : "hidden")}>{editor}</div>
+          {view === "console" && <div className="absolute inset-0">{consoleEl(true)}</div>}
+          {view === "problems" && (
+            <div className="absolute inset-0 overflow-y-auto bg-background">
+              <ProblemsList diagnostics={diagnostics} onReveal={reveal} />
+            </div>
+          )}
+
+          {view === "code" && !keyboardOpen && (
+            <button
+              onClick={start}
+              disabled={running}
+              className="absolute bottom-4 right-4 z-30 inline-flex h-14 items-center gap-3 rounded-2xl bg-primary px-5 text-[15px] font-semibold text-primary-foreground shadow-fab transition active:scale-95 disabled:opacity-80"
+            >
+              {running ? <Loader2 className="size-5 animate-spin" /> : <Play className="size-5 fill-current" />}
+              {runLabel}
+            </button>
+          )}
+        </main>
+
+        {showKeys && <ExtraKeys onKey={(k) => editorHandle.current?.key(k)} onText={(t) => editorHandle.current?.insertText(t)} onRun={start} running={running} />}
+
+        {!keyboardOpen && (
+          <nav aria-label="Vistas do editor" className="pb-safe grid shrink-0 grid-cols-3 border-t border-border/40 bg-surface-2">
+            <TabItem active={view === "code"} onClick={() => setView("code")} icon={<Code2 />} label="Código" />
+            <TabItem
+              active={view === "console"}
+              onClick={() => setView("console")}
+              icon={<SquareTerminal />}
+              label="Consola"
+              badge={
+                running ? (
+                  <span className="absolute -right-0.5 -top-0.5 size-2.5 animate-pulse rounded-full bg-primary ring-2 ring-surface-2" />
+                ) : waiting ? (
+                  <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-warning ring-2 ring-surface-2" />
+                ) : result ? (
+                  <span className={cn("absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-surface-2", result.ok ? "bg-success" : "bg-destructive")} />
+                ) : null
+              }
+            />
+            <TabItem
+              active={view === "problems"}
+              onClick={() => setView("problems")}
+              icon={<Bug />}
+              label="Problemas"
+              badge={
+                diagnostics.length ? (
+                  <span
+                    className={cn(
+                      "absolute -right-2.5 -top-1.5 min-w-[18px] rounded-full px-1 text-center text-[10px] font-bold leading-[18px]",
+                      errorsCount ? "bg-destructive text-destructive-foreground" : "bg-warning text-background",
+                    )}
+                  >
+                    {diagnostics.length}
+                  </span>
+                ) : null
+              }
+            />
+          </nav>
+        )}
+        {hidden.rest}
+      </div>
+    );
+  }
+
+  /* -------------------------------- Tablet / PC ------------------------------- */
+  return (
+    <div ref={rootRef} className={cn("flex h-dvh bg-background text-foreground", cssFs && "fixed inset-0 z-50")}>
+      {!fullscreen && <NavRail active="editor" />}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center gap-1 px-3">
+          {backButton}
+          {titleBlock}
+          <div className="flex shrink-0 items-center gap-0.5">
+            {actions}
+            <Button variant="toolbar" size="sm" onClick={() => setExamplesOpen(true)}>
+              <BookOpen /> Exemplos
+            </Button>
+            {fullscreen && (
+              <>
+                <ThemePicker />
+                <ModeToggle />
+              </>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="toolbar"
-                  size="icon-xs"
+                  size="icon-sm"
                   onClick={() => setPrefs({ layout: prefs.layout === "horizontal" ? "vertical" : "horizontal" })}
                   aria-label="Alternar disposição"
                 >
-                  {prefs.layout === "horizontal" ? <Rows2 className="size-3.5" /> : <Columns2 className="size-3.5" />}
+                  {prefs.layout === "horizontal" ? <Rows2 /> : <Columns2 />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{prefs.layout === "horizontal" ? "Consola em baixo" : "Consola ao lado"}</TooltipContent>
             </Tooltip>
-          )}
-        </div>
-      </div>
-      <div className="min-h-0 flex-1">
-        <ClientOnly fallback={<EditorSkeleton />}>
-          <Suspense fallback={<EditorSkeleton />}>
-            <CodeEditor
-              value={code}
-              onChange={onCodeChange}
-              themeId={theme.id}
-              fontSize={isMobile ? Math.min(prefs.fontSize, 13) : prefs.fontSize}
-              minimap={!isMobile && prefs.minimap}
-              compact={isMobile}
-              diagnostics={diagnostics}
-              onRun={() => execute()}
-              onSave={onSave}
-              onCursorChange={(line, column) => setCursor({ line, column })}
-              handleRef={editorHandle}
-            />
-          </Suspense>
-        </ClientOnly>
-      </div>
-    </div>
-  );
-
-  const panel = (hideTabs?: boolean, tab?: PanelTab) => (
-    <OutputPanel
-      tab={tab ?? panelTab}
-      onTabChange={setPanelTab}
-      result={result}
-      running={running}
-      stdin={stdin}
-      onStdinChange={onStdinChange}
-      inputCalls={inputCalls}
-      onReveal={reveal}
-      onClear={() => setResult(null)}
-      hideTabs={hideTabs}
-    />
-  );
-
-  const errorsCount = diagnostics.filter((d) => d.severity === "error").length;
-
-  return (
-    <div
-      ref={rootRef}
-      className={cn(
-        "flex h-dvh flex-col bg-background text-foreground",
-        cssFs && "fixed inset-0 z-50",
-      )}
-    >
-      {/* Top bar */}
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-panel px-2 sm:gap-3 sm:px-3">
-        <Link to="/" aria-label="Início" className="shrink-0">
-          <LogoMark className="size-7 text-[11px]" />
-        </Link>
-        {breadcrumb && <div className="hidden shrink-0 items-center text-sm text-muted-foreground md:flex">{breadcrumb}</div>}
-        <div className="min-w-0 flex-1">
-          {editingName && onRename ? (
-            <input
-              autoFocus
-              defaultValue={fileName}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v && v !== fileName) onRename(v);
-                setEditingName(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setEditingName(false);
-              }}
-              className="h-8 w-full max-w-72 rounded border border-ring bg-background px-2 text-sm font-medium outline-none"
-            />
-          ) : (
-            <button
-              onClick={() => onRename && setEditingName(true)}
-              className={cn(
-                "flex min-w-0 max-w-full items-center gap-2 rounded px-1.5 py-1 text-left",
-                onRename && "hover:bg-accent",
-              )}
-              title={onRename ? "Mudar o nome" : undefined}
-            >
-              <span className="truncate text-sm font-semibold tracking-tight">{fileName}</span>
-              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{saveStatus}</span>
-            </button>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-          <Button variant="toolbar" size="sm" onClick={() => setExamplesOpen(true)} className="hidden sm:inline-flex">
-            <BookOpen /> Exemplos
-          </Button>
-          {actions}
-          <div className="hidden items-center sm:flex">
-            <ThemePicker />
-            <ModeToggle />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="toolbar" size="icon-sm" onClick={toggleFullscreen} aria-label="Ecrã inteiro">
+                  {fullscreen ? <Minimize2 /> : <Maximize2 />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{fullscreen ? "Sair do ecrã inteiro" : "Ecrã inteiro"} · Ctrl+Shift+F</TooltipContent>
+            </Tooltip>
+            {moreMenu}
+            <Button variant="run" onClick={start} disabled={running} className="ml-2 h-11 rounded-2xl px-5">
+              {running ? <Loader2 className="animate-spin" /> : <Play className="fill-current" />}
+              {runLabel}
+            </Button>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="toolbar" size="icon-sm" onClick={toggleFullscreen} aria-label="Ecrã inteiro">
-                {fullscreen ? <Minimize2 /> : <Maximize2 />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{fullscreen ? "Sair do ecrã inteiro" : "Ecrã inteiro"} · Ctrl+Shift+F</TooltipContent>
-          </Tooltip>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="toolbar" size="icon-sm" aria-label="Mais opções">
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={() => setExamplesOpen(true)} className="sm:hidden">
-                <BookOpen /> Exemplos
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={download}>
-                <Download /> Descarregar .cs
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
-                <Upload /> Abrir ficheiro .cs
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={copy}>
-                <Copy /> Copiar código
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setShortcutsOpen(true)}>
-                <Keyboard /> Atalhos do teclado
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button variant="run" size="sm" onClick={() => execute()} disabled={running} className="ml-1 px-3">
-            {running ? <Loader2 className="animate-spin" /> : <Play className="fill-current" />}
-            <span className="hidden sm:inline">{running ? "A executar" : "Executar"}</span>
-          </Button>
-          <div className="ml-1 hidden sm:block">
-            <UserMenu compact />
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Body */}
-      {isMobile ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="grid h-10 shrink-0 grid-cols-3 border-b border-border bg-panel p-1">
-            {(
-              [
-                ["code", "Código"],
-                ["input", "Entrada"],
-                ["output", "Saída"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setMobileView(id)}
-                data-active={mobileView === id}
-                className="relative rounded text-xs font-medium text-muted-foreground transition data-[active=true]:bg-accent data-[active=true]:text-foreground"
-              >
-                {label}
-                {id === "output" && result && (
-                  <span
-                    className={cn(
-                      "absolute right-3 top-1/2 size-1.5 -translate-y-1/2 rounded-full",
-                      result.ok ? "bg-success" : "bg-destructive",
-                    )}
-                  />
-                )}
-                {id === "input" && stdin.trim() && (
-                  <span className="absolute right-3 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-primary" />
-                )}
-              </button>
-            ))}
-          </div>
-          <div className={cn("min-h-0 flex-1", mobileView === "code" ? "block" : "hidden")}>{editor}</div>
-          {mobileView === "input" && <div className="min-h-0 flex-1">{panel(true, "input")}</div>}
-          {mobileView === "output" && (
-            <div className="min-h-0 flex-1">
-              {panel(false, panelTab === "input" ? "output" : panelTab)}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 px-3 pb-3">
           <ResizablePanelGroup key={prefs.layout} orientation={prefs.layout}>
-            <ResizablePanel defaultSize={prefs.layout === "horizontal" ? "62%" : "65%"} minSize="25%">
-              {editor}
+            <ResizablePanel defaultSize={prefs.layout === "horizontal" ? "60%" : "64%"} minSize="25%">
+              <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-editor ring-1 ring-border/60">
+                <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/50 bg-surface-1 px-4 text-xs">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 font-mono text-foreground">
+                    <Code2 className="size-3.5 text-syn-keyword" /> Program.cs
+                  </span>
+                  <span className="ml-auto font-mono text-muted-foreground">
+                    Ln {cursor.line}, Col {cursor.column}
+                  </span>
+                  <span className="font-mono text-muted-foreground">C# 12 · .NET 8</span>
+                </div>
+                <div className="min-h-0 flex-1">{editor}</div>
+              </section>
             </ResizablePanel>
             <ResizableHandle
               className={cn(
-                "bg-border transition-colors hover:bg-primary data-[separator=active]:bg-primary",
-                prefs.layout === "horizontal" ? "w-px" : "h-px w-full",
+                "bg-transparent after:rounded-full after:bg-border after:transition-colors hover:after:bg-primary data-[separator=active]:after:bg-primary",
+                prefs.layout === "horizontal" ? "w-3 after:inset-y-[45%] after:left-1 after:w-1" : "h-3 w-full after:inset-x-[45%] after:top-1 after:h-1",
               )}
             />
-            <ResizablePanel defaultSize={prefs.layout === "horizontal" ? "38%" : "35%"} minSize="18%">
-              {panel()}
+            <ResizablePanel defaultSize={prefs.layout === "horizontal" ? "40%" : "36%"} minSize="18%">
+              <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-terminal ring-1 ring-border/60">
+                <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border/50 bg-surface-1 px-2">
+                  <ChipTab active={sideTab === "console"} onClick={() => setSideTab("console")}>
+                    <SquareTerminal className="size-3.5" /> Consola
+                    {waiting && <span className="size-1.5 rounded-full bg-warning" />}
+                  </ChipTab>
+                  <ChipTab active={sideTab === "problems"} onClick={() => setSideTab("problems")}>
+                    <Bug className="size-3.5" /> Problemas
+                    {diagnostics.length > 0 && (
+                      <span className={cn("rounded-full px-1.5 text-[10px] leading-4", errorsCount ? "bg-destructive/15 text-destructive" : "bg-warning/15 text-warning")}>
+                        {diagnostics.length}
+                      </span>
+                    )}
+                  </ChipTab>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {sideTab === "console" ? consoleEl(true) : (
+                    <div className="h-full overflow-y-auto">
+                      <ProblemsList diagnostics={diagnostics} onReveal={reveal} />
+                    </div>
+                  )}
+                </div>
+              </section>
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
-      )}
-
-      {/* Status bar */}
-      <footer className="flex h-6 shrink-0 items-center gap-3 bg-statusbar px-3 font-mono text-[11px] text-statusbar-foreground">
-        <span className="font-semibold">{result?.engine ?? "C# 12 · .NET 8"}</span>
-        <span className="hidden sm:inline">
-          Ln {cursor.line}, Col {cursor.column}
-        </span>
-        <span className="hidden md:inline">UTF-8 · Espaços: 4</span>
-        {errorsCount > 0 && <span>✕ {errorsCount}</span>}
-        <span className="ml-auto truncate">
-          {running
-            ? "A executar…"
-            : result
-              ? `${STATUS_LABEL[result.status]}${result.time != null ? ` · ${result.time.toFixed(3)}s` : ""}`
-              : "Pronto"}
-        </span>
-        <span className="hidden md:inline">{theme.label}</span>
-      </footer>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".cs,.txt"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) upload(f);
-          e.target.value = "";
-        }}
-      />
-
-      <ExamplesDialog open={examplesOpen} onOpenChange={setExamplesOpen} onPick={pickExample} />
-      <InputDialog
-        open={inputOpen}
-        onOpenChange={setInputOpen}
-        inputCalls={inputCalls}
-        initial={stdin}
-        onSubmit={(value) => {
-          setInputOpen(false);
-          onStdinChange(value);
-          execute(value);
-        }}
-      />
-      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      </div>
+      {hidden.rest}
     </div>
   );
 }
 
-function EditorSettings({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Partial<Prefs>) => void }) {
+function TabItem({ active, onClick, icon, label, badge }: { active: boolean; onClick: () => void; icon: ReactNode; label: string; badge?: ReactNode }) {
   return (
-    <Popover>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button variant="toolbar" size="icon-xs" aria-label="Definições do editor">
-              <Settings2 className="size-3.5" />
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Definições do editor</TooltipContent>
-      </Tooltip>
-      <PopoverContent align="end" className="w-64">
-        <p className="label-mono text-muted-foreground">Editor</p>
-        <div className="mt-3 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Tamanho da letra</span>
-            <div className="flex items-center gap-1">
-              <Button variant="subtle" size="icon-xs" onClick={() => setPrefs({ fontSize: Math.max(10, prefs.fontSize - 1) })}>
-                −
-              </Button>
-              <span className="w-8 text-center font-mono text-sm">{prefs.fontSize}</span>
-              <Button variant="subtle" size="icon-xs" onClick={() => setPrefs({ fontSize: Math.min(28, prefs.fontSize + 1) })}>
-                +
-              </Button>
-            </div>
-          </div>
-          <label className="flex items-center justify-between">
-            <span className="text-sm">Minimapa</span>
-            <Switch checked={prefs.minimap} onCheckedChange={(v) => setPrefs({ minimap: v })} />
-          </label>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <button onClick={onClick} aria-current={active ? "page" : undefined} className="flex h-[72px] flex-col items-center justify-center gap-1 text-xs font-semibold">
+      <span
+        className={cn(
+          "relative flex h-8 w-16 items-center justify-center rounded-full transition-colors [&_svg]:size-[22px]",
+          active ? "bg-primary-container text-on-primary-container" : "text-muted-foreground",
+        )}
+      >
+        {icon}
+        {badge}
+      </span>
+      <span className={active ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+    </button>
+  );
+}
+
+function ChipTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      data-active={active}
+      className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-foreground/5 data-[active=true]:bg-primary-container data-[active=true]:text-on-primary-container"
+    >
+      {children}
+    </button>
+  );
+}
+
+const SYMBOLS = ["{", "}", "(", ")", "[", "]", ";", '"', "'", "=", "<", ">", "+", "-", "*", "/", "%", "!", "&", "|", ":", ",", ".", "$", "_", "?"];
+
+/** Extra keys above the phone keyboard (programming symbols, arrows, undo). */
+function ExtraKeys({ onKey, onText, onRun, running }: { onKey: (k: EditorKey) => void; onText: (t: string) => void; onRun: () => void; running: boolean }) {
+  const keep = (e: React.PointerEvent | React.MouseEvent) => e.preventDefault();
+  const base =
+    "flex h-11 min-w-11 shrink-0 items-center justify-center rounded-xl px-2 font-mono text-[15px] text-foreground active:bg-foreground/15 [&_svg]:size-[18px]";
+  return (
+    <div className="flex shrink-0 items-center gap-1 border-t border-border/40 bg-surface-2 px-1 py-1">
+      <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("tab")} className={cn(base, "px-3 font-sans text-xs font-semibold")}>
+          TAB
+        </button>
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("left")} className={base} aria-label="Esquerda">
+          <ArrowLeftIcon />
+        </button>
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("right")} className={base} aria-label="Direita">
+          <ArrowRight />
+        </button>
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("up")} className={base} aria-label="Cima">
+          <ArrowUp />
+        </button>
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("down")} className={base} aria-label="Baixo">
+          <ArrowDown />
+        </button>
+        {SYMBOLS.map((s) => (
+          <button key={s} onPointerDown={keep} onMouseDown={keep} onClick={() => onText(s)} className={base}>
+            {s}
+          </button>
+        ))}
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("undo")} className={base} aria-label="Desfazer">
+          <Undo2 />
+        </button>
+        <button onPointerDown={keep} onMouseDown={keep} onClick={() => onKey("redo")} className={base} aria-label="Refazer">
+          <Redo2 />
+        </button>
+        <button
+          onPointerDown={keep}
+          onMouseDown={keep}
+          onClick={() => (document.activeElement as HTMLElement | null)?.blur?.()}
+          className={base}
+          aria-label="Esconder teclado"
+        >
+          <ChevronDown />
+        </button>
+      </div>
+      <button
+        onPointerDown={keep}
+        onMouseDown={keep}
+        onClick={onRun}
+        disabled={running}
+        aria-label="Executar"
+        className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground active:scale-95"
+      >
+        {running ? <Loader2 className="size-5 animate-spin" /> : <Play className="size-5 fill-current" />}
+      </button>
+    </div>
   );
 }
 
 const SHORTCUTS: [string[], string][] = [
   [["Ctrl", "Enter"], "Compilar e executar"],
-  [["F5"], "Executar (no editor)"],
+  [["F5"], "Executar"],
   [["Ctrl", "S"], "Guardar"],
   [["Ctrl", "Shift", "F"], "Ecrã inteiro"],
-  [["Ctrl", "Espaço"], "Sugestões e snippets"],
-  [["Ctrl", "/"], "Comentar linha"],
-  [["Alt", "↑/↓"], "Mover linha"],
-  [["Shift", "Alt", "↓"], "Duplicar linha"],
-  [["Ctrl", "D"], "Seleccionar próxima ocorrência"],
-  [["Ctrl", "F"], "Procurar"],
-  [["Ctrl", "H"], "Substituir"],
-  [["F1"], "Paleta de comandos"],
+  [["Tab"], "Indentar / expandir snippet"],
+  [["Shift", "Tab"], "Recuar indentação"],
+  [["Ctrl", "/"], "Comentar linhas"],
+  [["Ctrl", "Z"], "Desfazer"],
+  [["Ctrl", "C"], "Parar o programa (na consola)"],
 ];
 
 function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -603,11 +751,11 @@ function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md">
         <DialogHeader className="text-left">
-          <DialogTitle className="tracking-tight">Atalhos do teclado</DialogTitle>
+          <DialogTitle className="text-xl tracking-tight">Atalhos do teclado</DialogTitle>
         </DialogHeader>
-        <ul className="divide-y divide-border">
+        <ul className="divide-y divide-border/60">
           {SHORTCUTS.map(([keys, label]) => (
-            <li key={label} className="flex items-center justify-between py-2 text-sm">
+            <li key={label} className="flex items-center justify-between py-2.5 text-sm">
               <span className="text-muted-foreground">{label}</span>
               <span className="flex gap-1">
                 {keys.map((k) => (
@@ -618,8 +766,8 @@ function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
           ))}
         </ul>
         <p className="text-xs text-muted-foreground">
-          Dica: escreva <code className="font-mono text-foreground">cw</code>, <code className="font-mono text-foreground">for</code>,{" "}
-          <code className="font-mono text-foreground">lerint</code> ou <code className="font-mono text-foreground">matriz</code> e carregue em Tab.
+          Snippets: escreva <code className="font-mono text-foreground">cw</code>, <code className="font-mono text-foreground">for</code>,{" "}
+          <code className="font-mono text-foreground">lerint</code> ou <code className="font-mono text-foreground">matriz</code> e prima Tab.
         </p>
       </DialogContent>
     </Dialog>

@@ -1,25 +1,17 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  BookOpen,
-  Calculator,
-  Cloud,
-  Grid3x3,
-  Keyboard,
-  Maximize2,
-  Palette,
-  Play,
-  Sparkles,
-  Zap,
-} from "lucide-react";
-import type { ReactNode } from "react";
-import { Logo } from "@/components/brand/Logo";
-import { ModeToggle, Swatch, ThemePicker } from "@/components/ThemePicker";
+import { formatDistanceToNow } from "date-fns";
+import { pt } from "date-fns/locale";
+import { ArrowRight, Bug, ChevronRight, Cloud, Code2, FolderOpen, Keyboard, LibraryBig, Maximize2, Play, SquareTerminal } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AppShell } from "@/components/app/AppShell";
+import { LogoMark } from "@/components/brand/Logo";
+import { ModeToggle, ThemePicker } from "@/components/ThemePicker";
 import { UserMenu } from "@/components/UserMenu";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { displayNameOf, useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
-import { CATEGORIES, EXAMPLES } from "@/lib/examples";
+import { CATEGORIES, EXAMPLES, type Example, type ExampleCategory } from "@/lib/examples";
+import { projectsQuery } from "@/lib/projects";
 import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 
@@ -30,392 +22,312 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Escreva, compile e execute programas C# no navegador. Entrada de dados, vetores, matrizes, matemática avançada, temas VS Code e Drácula, e projectos na nuvem.",
+          "Escreva, compile e execute programas C# no telemóvel ou no computador. Consola interactiva, vetores, matrizes, matemática, temas VS Code e Drácula, e projectos na nuvem.",
       },
-      { property: "og:title", content: "C# Codex — o seu IDE de C# no navegador" },
+      { property: "og:title", content: "C# Codex — o seu IDE de C# de bolso" },
       {
         property: "og:description",
-        content: "Compile e execute C# em segundos, com exemplos prontos, temas profissionais e projectos guardados.",
+        content: "Compile e execute C# em segundos, com consola interactiva, exemplos prontos e projectos guardados.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: Landing,
+  component: Home,
 });
 
-function Landing() {
-  const { user } = useAuth();
-  return (
-    <div className="min-h-dvh overflow-x-clip bg-background">
-      <Nav />
-      <Hero signedIn={!!user} />
-      <Stats />
-      <Features />
-      <Themes />
-      <ExamplesShowcase />
-      <FinalCta signedIn={!!user} />
-      <Footer />
-    </div>
-  );
-}
+const CATEGORY_GLYPH: Record<ExampleCategory, string> = {
+  Fundamentos: "{ }",
+  "Entrada de dados": ">_",
+  Vetores: "[ ]",
+  Matrizes: "[,]",
+  Matemática: "∑",
+  Strings: '" "',
+  POO: "◇",
+  "Coleções & LINQ": "=>",
+  Algoritmos: "ƒ",
+};
 
-function Nav() {
+const LEVEL_TONE: Record<Example["level"], string> = {
+  Iniciante: "bg-success/12 text-success",
+  Intermédio: "bg-info/12 text-info",
+  Avançado: "bg-syn-keyword/12 text-syn-keyword",
+};
+
+function Home() {
+  const { user } = useAuth();
+  const first = user ? displayNameOf(user).split(" ")[0] : null;
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <Logo />
-        <nav className="ml-6 hidden items-center gap-1 text-sm text-muted-foreground md:flex">
-          <a href="#recursos" className="rounded px-2.5 py-1.5 hover:text-foreground">Recursos</a>
-          <a href="#temas" className="rounded px-2.5 py-1.5 hover:text-foreground">Temas</a>
-          <a href="#exemplos" className="rounded px-2.5 py-1.5 hover:text-foreground">Exemplos</a>
-        </nav>
-        <div className="ml-auto flex items-center gap-1">
+    <AppShell
+      active="home"
+      leading={
+        <Link to="/" className="ml-2 md:hidden" aria-label="C# Codex">
+          <LogoMark className="size-9 rounded-xl text-xs" />
+        </Link>
+      }
+      title={
+        <span>
+          C# <span className="text-muted-foreground">Codex</span>
+        </span>
+      }
+      actions={
+        <div className="flex items-center gap-0.5 md:hidden">
           <ThemePicker />
           <ModeToggle />
-          <div className="ml-1.5 hidden sm:block">
-            <UserMenu />
+          <div className="ml-1 mr-1">
+            <UserMenu compact />
           </div>
-          <Button asChild variant="hero" size="sm" className="ml-1.5">
-            <Link to="/playground">
-              Abrir editor <ArrowRight />
-            </Link>
-          </Button>
         </div>
-      </div>
-    </header>
-  );
-}
+      }
+    >
+      <div className="mx-auto max-w-5xl px-4 md:px-6">
+        {/* Greeting */}
+        <section className="animate-rise pt-2">
+          <p className="text-sm font-medium text-muted-foreground">{first ? `Olá, ${first} 👋` : "Bem-vindo 👋"}</p>
+          <h1 className="mt-1 text-[30px] font-bold leading-[1.1] tracking-tight md:text-[40px]">O que vamos programar hoje?</h1>
+        </section>
 
-function Hero({ signedIn }: { signedIn: boolean }) {
-  return (
-    <section className="relative">
-      <div className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)]" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[1fr_1.1fr] lg:items-center lg:gap-10 lg:pb-24">
-        <div className="animate-rise">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
-            Compilador online · sem instalar nada
-          </span>
-          <h1 className="mt-6 text-[2.6rem] font-semibold leading-[0.98] text-balance-tight sm:text-6xl lg:text-[4.2rem]">
-            Escreva C#.
-            <br />
-            <span className="text-muted-foreground">Compile.</span>{" "}
-            <span className="relative whitespace-nowrap text-primary">
-              Execute.
-              <span className="absolute -right-4 top-1 h-[0.85em] w-[3px] animate-blink bg-primary" />
-            </span>
-          </h1>
-          <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-            O C# Codex é um IDE completo no navegador: editor profissional, entrada de dados, matrizes, números
-            gigantes e os seus projectos guardados na nuvem.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button asChild variant="hero" size="xl">
-              <Link to="/playground">
-                <Play className="fill-current" /> Começar a programar
-              </Link>
-            </Button>
-            <Button asChild variant="subtle" size="xl">
-              <Link to={signedIn ? "/projects" : "/auth"}>{signedIn ? "Os meus projectos" : "Criar conta grátis"}</Link>
-            </Button>
-          </div>
-          <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
-            <Keyboard className="size-3.5" /> Dica: <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd> executa o programa
-          </p>
-        </div>
-
-        <div className="animate-rise [animation-delay:120ms]">
-          <IdePreview />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] text-foreground">{children}</kbd>
-  );
-}
-
-/* Static, theme-aware mock of the IDE. */
-function IdePreview() {
-  const K = ({ children }: { children: ReactNode }) => <span className="text-syn-keyword">{children}</span>;
-  const T = ({ children }: { children: ReactNode }) => <span className="text-syn-type">{children}</span>;
-  const F = ({ children }: { children: ReactNode }) => <span className="text-syn-fn">{children}</span>;
-  const S = ({ children }: { children: ReactNode }) => <span className="text-syn-string">{children}</span>;
-  const N = ({ children }: { children: ReactNode }) => <span className="text-syn-number">{children}</span>;
-  const C = ({ children }: { children: ReactNode }) => <span className="italic text-syn-comment">{children}</span>;
-  const P = ({ children }: { children: ReactNode }) => <span className="text-syn-punct">{children}</span>;
-
-  const lines: ReactNode[] = [
-    <><K>using</K> <T>System</T><P>;</P></>,
-    <><K>using</K> <T>System</T><P>.</P><T>Numerics</T><P>;</P></>,
-    <></>,
-    <><K>class</K> <T>Program</T></>,
-    <><P>{"{"}</P></>,
-    <>    <K>static void</K> <F>Main</F><P>()</P></>,
-    <>    <P>{"{"}</P></>,
-    <>        <C>// Fatorial de 50 com precisão arbitrária</C></>,
-    <>        <T>BigInteger</T> f <P>=</P> <N>1</N><P>;</P></>,
-    <>        <K>for</K> <P>(</P><K>int</K> i <P>=</P> <N>2</N><P>;</P> i <P>{"<="}</P> <N>50</N><P>;</P> i<P>++)</P> f <P>*=</P> i<P>;</P></>,
-    <>        <T>Console</T><P>.</P><F>WriteLine</F><P>(</P><S>$"50! = {"{"}f{"}"}"</S><P>);</P></>,
-    <>    <P>{"}"}</P></>,
-    <><P>{"}"}</P></>,
-  ];
-
-  return (
-    <div className="relative">
-      <div className="absolute -inset-6 -z-10 rounded-[2rem] bg-primary/10 blur-3xl" />
-      <div className="overflow-hidden rounded-xl bg-editor shadow-window">
-        <div className="flex h-10 items-center gap-2 border-b border-border bg-panel px-3">
-          <span className="size-2.5 rounded-full bg-destructive/80" />
-          <span className="size-2.5 rounded-full bg-warning/80" />
-          <span className="size-2.5 rounded-full bg-success/80" />
-          <span className="ml-3 rounded-t border-x border-t border-border bg-editor px-3 py-1.5 font-mono text-[11px] text-foreground">
-            Program.cs
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
-            <Play className="size-3 fill-current" /> Executar
-          </span>
-        </div>
-        <pre className="overflow-x-auto py-4 font-mono text-[11.5px] leading-[1.75] sm:text-[13px]">
-          {lines.map((l, i) => (
-            <div key={i} className={cn("flex pr-4", i === 9 && "bg-accent/40")}>
-              <span className="w-10 shrink-0 select-none pr-4 text-right text-muted-foreground/50">{i + 1}</span>
-              <span className="whitespace-pre text-foreground">{l}</span>
+        {/* Quick actions */}
+        <section className="mt-6 grid gap-3 md:grid-cols-[1.4fr_1fr]">
+          <Link
+            to="/playground"
+            className="group relative overflow-hidden rounded-[28px] bg-primary p-5 text-primary-foreground transition active:scale-[0.99] md:row-span-2 md:p-7"
+          >
+            <div className="flex items-start justify-between">
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-primary-foreground/12">
+                <Code2 className="size-6" />
+              </span>
+              <span className="flex size-11 items-center justify-center rounded-full bg-primary-foreground text-primary transition group-hover:translate-x-0.5">
+                <ArrowRight className="size-5" />
+              </span>
             </div>
-          ))}
-        </pre>
-        <div className="border-t border-border bg-terminal px-4 py-3 font-mono text-[11.5px] leading-relaxed sm:text-[12.5px]">
-          <p className="text-muted-foreground">
-            <span className="text-primary">$</span> dotnet run
+            <h2 className="mt-8 text-2xl font-bold tracking-tight md:mt-14 md:text-3xl">Abrir o editor</h2>
+            <p className="mt-1 text-sm opacity-80">C# 12 · .NET 8 · consola interactiva</p>
+            <div className="code-font mt-5 overflow-hidden rounded-2xl bg-primary-foreground/10 px-4 py-3 text-[12.5px] leading-relaxed">
+              <p className="opacity-70">// o seu primeiro programa</p>
+              <p className="whitespace-nowrap">
+                Console.<span className="font-semibold">WriteLine</span>("Olá, Angola!");
+              </p>
+            </div>
+          </Link>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-1">
+            <Link
+              to={user ? "/projects" : "/auth"}
+              className="flex flex-col justify-between gap-6 rounded-[28px] bg-surface-2 p-5 transition hover:bg-surface-3 active:scale-[0.99]"
+            >
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                <FolderOpen className="size-5" />
+              </span>
+              <span>
+                <span className="block text-base font-semibold leading-tight">{user ? "Os meus projectos" : "Guardar projectos"}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{user ? "Guardados na nuvem" : "Crie uma conta grátis"}</span>
+              </span>
+            </Link>
+            <a
+              href="#exemplos"
+              className="flex flex-col justify-between gap-6 rounded-[28px] bg-surface-2 p-5 transition hover:bg-surface-3 active:scale-[0.99]"
+            >
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-secondary text-syn-keyword">
+                <LibraryBig className="size-5" />
+              </span>
+              <span>
+                <span className="block text-base font-semibold leading-tight">{EXAMPLES.length} exemplos</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">Prontos a executar</span>
+              </span>
+            </a>
+          </div>
+        </section>
+
+        {user && <RecentProjects />}
+
+        <ExamplesSection />
+        <ThemesSection />
+        <WhySection />
+
+        <footer className="mt-12 flex flex-col items-center gap-3 border-t border-border/50 py-8 text-center">
+          <LogoMark className="size-10 rounded-2xl" />
+          <p className="text-sm text-muted-foreground">Editor, compilador e execução de C#.</p>
+          <p className="text-sm">
+            Desenvolvido por: <span className="font-semibold text-foreground">Pascoal André (Whizy Safary)</span>
           </p>
-          <p className="break-all text-foreground">50! = 30414093201713378043612608166064768844377641568960512000000000000</p>
-          <p className="mt-1 text-success">✓ Executado com sucesso · 0.031 s · 4.7 MB</p>
-        </div>
-        <div className="flex h-6 items-center gap-3 bg-statusbar px-3 font-mono text-[10px] text-statusbar-foreground">
-          <span className="font-semibold">C# 12 · .NET 8</span>
-          <span>Ln 10, Col 54</span>
-          <span className="ml-auto">UTF-8</span>
-        </div>
+          <p className="font-mono text-xs text-muted-foreground">© {new Date().getFullYear()} C# Codex</p>
+        </footer>
       </div>
+    </AppShell>
+  );
+}
+
+function SectionTitle({ title, action, id }: { title: string; action?: React.ReactNode; id?: string }) {
+  return (
+    <div id={id} className="mb-3 mt-10 flex scroll-mt-20 items-center justify-between">
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      {action}
     </div>
   );
 }
 
-function Stats() {
-  const items = [
-    [String(EXAMPLES.length), "exemplos prontos"],
-    ["6", "temas de editor"],
-    ["< 1 s", "para compilar"],
-    ["0", "instalações"],
-  ];
+function RecentProjects() {
+  const { data } = useQuery({ ...projectsQuery(), staleTime: 30_000 });
+  const recent = (data ?? []).slice(0, 3);
+  if (!recent.length) return null;
   return (
-    <section className="border-y border-border bg-panel">
-      <div className="mx-auto grid max-w-6xl grid-cols-2 divide-x divide-border sm:grid-cols-4">
-        {items.map(([n, l], i) => (
-          <div key={l} className={cn("px-4 py-6 sm:px-6", i >= 2 && "border-t border-border sm:border-t-0")}>
-            <p className="font-mono text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{n}</p>
-            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{l}</p>
-          </div>
+    <section>
+      <SectionTitle
+        title="Continuar"
+        action={
+          <Link to="/projects" className="inline-flex items-center gap-0.5 rounded-full px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary/10">
+            Ver todos <ChevronRight className="size-4" />
+          </Link>
+        }
+      />
+      <ul className="overflow-hidden rounded-[24px] bg-surface-1">
+        {recent.map((p, i) => (
+          <li key={p.id} className={cn(i > 0 && "border-t border-border/40")}>
+            <Link to="/projects/$projectId" params={{ projectId: p.id }} className="flex items-center gap-4 px-4 py-3.5 transition hover:bg-foreground/[0.03] active:bg-foreground/[0.06]">
+              <span className="code-font flex size-11 shrink-0 items-center justify-center rounded-2xl bg-editor text-[13px] font-bold text-syn-keyword ring-1 ring-border/60">
+                C#
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{p.name}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {p.code.split("\n").length} linhas · {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true, locale: pt })}
+                </span>
+              </span>
+              <ChevronRight className="size-5 text-muted-foreground" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ExamplesSection() {
+  const [category, setCategory] = useState<ExampleCategory | "Todos">("Todos");
+  const list = useMemo(() => EXAMPLES.filter((e) => category === "Todos" || e.category === category), [category]);
+  return (
+    <section>
+      <SectionTitle id="exemplos" title="Exemplos" />
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
+        {(["Todos", ...CATEGORIES] as const).map((c) => (
+          <button
+            key={c}
+            onClick={() => setCategory(c)}
+            data-active={category === c}
+            className="h-9 shrink-0 rounded-xl border border-border px-4 text-[13px] font-medium text-muted-foreground transition-colors data-[active=true]:border-transparent data-[active=true]:bg-primary-container data-[active=true]:text-on-primary-container"
+          >
+            {c}
+          </button>
         ))}
       </div>
-    </section>
-  );
-}
-
-function SectionHead({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
-  return (
-    <div className="max-w-2xl">
-      <p className="label-mono text-primary">{kicker}</p>
-      <h2 className="mt-3 text-3xl font-semibold leading-[1.05] text-balance-tight sm:text-[2.6rem]">{title}</h2>
-      {sub && <p className="mt-4 text-base leading-relaxed text-muted-foreground">{sub}</p>}
-    </div>
-  );
-}
-
-function Features() {
-  return (
-    <section id="recursos" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-28">
-      <SectionHead
-        kicker="01 / Recursos"
-        title="Tudo o que um bom IDE precisa. Nada do que atrapalha."
-        sub="Do primeiro Console.WriteLine a sistemas lineares — o C# Codex acompanha cada etapa da aprendizagem e do trabalho."
-      />
-      <div className="mt-12 grid gap-4 md:grid-cols-6">
-        <Feature className="md:col-span-4" icon={<Zap />} title="Editor de nível profissional">
-          O mesmo motor do Visual Studio Code: realce de sintaxe C#, autocompletar, snippets (<code className="font-mono text-foreground">cw</code>,{" "}
-          <code className="font-mono text-foreground">for</code>, <code className="font-mono text-foreground">matriz</code>), multicursor,
-          minimapa e erros sublinhados na linha certa.
-          <div className="mt-5 flex flex-wrap gap-2 font-mono text-[11px]">
-            {["IntelliSense", "Snippets", "Multicursor", "Minimapa", "Procurar/Substituir", "Sticky scroll"].map((t) => (
-              <span key={t} className="rounded border border-border bg-background px-2 py-1 text-muted-foreground">
-                {t}
+      <ul className="mt-3 grid gap-2 md:grid-cols-2">
+        {list.map((ex) => (
+          <li key={ex.id}>
+            <Link
+              to="/playground"
+              search={{ example: ex.id }}
+              className="group flex items-center gap-4 rounded-[22px] bg-surface-1 p-3 pr-4 transition hover:bg-surface-2 active:scale-[0.99]"
+            >
+              <span className="code-font flex size-12 shrink-0 items-center justify-center rounded-2xl bg-editor text-sm font-bold text-primary ring-1 ring-border/60">
+                {CATEGORY_GLYPH[ex.category]}
               </span>
-            ))}
-          </div>
-        </Feature>
-        <Feature className="md:col-span-2" icon={<Keyboard />} title="Entrada de dados real">
-          Programas com <code className="font-mono text-foreground">Console.ReadLine()</code> pedem os dados antes de executar — uma linha por leitura.
-        </Feature>
-        <Feature className="md:col-span-2" icon={<Grid3x3 />} title="Vetores e matrizes">
-          Arrays, matrizes <code className="font-mono text-foreground">int[,]</code>, ordenação, determinantes e inversas — com saída alinhada.
-        </Feature>
-        <Feature className="md:col-span-2" icon={<Calculator />} title="Matemática pesada">
-          <code className="font-mono text-foreground">BigInteger</code>, <code className="font-mono text-foreground">Complex</code>, crivos de
-          primos com milhões de números e cálculo numérico.
-        </Feature>
-        <Feature className="md:col-span-2" icon={<Maximize2 />} title="Ecrã inteiro">
-          Foque-se no código: o editor ocupa o ecrã todo com <Kbd>Ctrl</Kbd>+<Kbd>Shift</Kbd>+<Kbd>F</Kbd>.
-        </Feature>
-        <Feature className="md:col-span-3" icon={<Cloud />} title="Projectos na nuvem">
-          Crie uma conta e guarde projectos ilimitados. Gravação automática enquanto escreve, favoritos, duplicar e pesquisa.
-        </Feature>
-        <Feature className="md:col-span-3" icon={<Sparkles />} title="Erros explicados em português">
-          Cada erro do compilador vem com uma explicação clara e um clique leva-o directamente à linha com o problema.
-          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 font-mono text-[11px] text-destructive">
-            CS1002 · Linha 8 — Falta um ponto e vírgula (;) no fim da instrução.
-          </p>
-        </Feature>
-      </div>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate font-semibold">{ex.title}</span>
+                </span>
+                <span className="line-clamp-1 text-[13px] text-muted-foreground">{ex.description}</span>
+                <span className="mt-1.5 flex items-center gap-1.5">
+                  <span className={cn("rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold", LEVEL_TONE[ex.level])}>{ex.level}</span>
+                  {ex.stdin && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                      <Keyboard className="size-3" /> pede dados
+                    </span>
+                  )}
+                </span>
+              </span>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground transition group-hover:bg-primary group-hover:text-primary-foreground">
+                <Play className="size-4 fill-current" />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-function Feature({ icon, title, children, className }: { icon: ReactNode; title: string; children: ReactNode; className?: string }) {
-  return (
-    <article className={cn("rounded-xl border border-border bg-card p-6 transition hover:border-primary/40", className)}>
-      <div className="flex size-9 items-center justify-center rounded-md bg-primary/12 text-primary [&_svg]:size-[18px]">{icon}</div>
-      <h3 className="mt-5 text-lg font-semibold tracking-tight">{title}</h3>
-      <div className="mt-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
-    </article>
-  );
-}
-
-function Themes() {
+function ThemesSection() {
   const { theme, setTheme } = useTheme();
   return (
-    <section id="temas" className="scroll-mt-20 border-y border-border bg-panel">
-      <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1fr_1.2fr] lg:items-center">
-        <SectionHead
-          kicker="02 / Temas"
-          title="Claro, escuro, VS Code ou Drácula. Experimente agora."
-          sub="Clique num tema: o site inteiro e o editor mudam na hora. A sua escolha fica guardada."
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          {THEMES.map((t) => (
+    <section>
+      <SectionTitle title="Tema do editor" />
+      <div className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-3 md:px-0">
+        {THEMES.map((t) => {
+          const [bg, accent, kw, type] = t.swatch;
+          const active = theme.id === t.id;
+          return (
             <button
               key={t.id}
               onClick={() => setTheme(t.id)}
-              data-active={theme.id === t.id}
-              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 text-left transition hover:border-primary/50 data-[active=true]:border-primary data-[active=true]:shadow-glow"
+              aria-pressed={active}
+              className={cn(
+                "w-44 shrink-0 snap-start overflow-hidden rounded-[22px] bg-surface-1 p-2 text-left ring-2 transition md:w-auto",
+                active ? "ring-primary" : "ring-transparent hover:bg-surface-2",
+              )}
             >
-              <Swatch colors={t.swatch} />
-              <span className="flex-1">
-                <span className="block text-sm font-semibold">{t.label}</span>
-                <span className="block text-xs text-muted-foreground">{t.mode === "dark" ? "Escuro" : "Claro"}</span>
+              {/* Mini preview painted with the theme's own colours. */}
+              <span className="code-font block rounded-2xl p-3 text-[10px] leading-[1.7]" style={{ backgroundColor: bg }}>
+                <span className="block" style={{ color: kw }}>
+                  static void <span style={{ color: type }}>Main</span>
+                </span>
+                <span className="block" style={{ color: accent }}>
+                  "Olá, mundo"
+                </span>
+                <span className="mt-1 block h-1.5 w-2/3 rounded-full" style={{ backgroundColor: accent, opacity: 0.5 }} />
               </span>
-              <Palette className="size-4 text-muted-foreground transition group-data-[active=true]:text-primary" />
+              <span className="flex items-center justify-between px-2 pb-1 pt-2.5">
+                <span>
+                  <span className="block text-sm font-semibold">{t.label}</span>
+                  <span className="block text-xs text-muted-foreground">{t.mode === "dark" ? "Escuro" : "Claro"}</span>
+                </span>
+                <span
+                  className={cn(
+                    "size-5 rounded-full border-2 transition",
+                    active ? "border-primary bg-primary shadow-[inset_0_0_0_3px_var(--card)]" : "border-muted-foreground/40",
+                  )}
+                />
+              </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function ExamplesShowcase() {
-  const featured = ["calculadora", "matriz-operacoes", "numeros-gigantes", "sistema-linear", "primos-crivo", "poo-banco"];
-  const list = featured.map((id) => EXAMPLES.find((e) => e.id === id)!).filter(Boolean);
+function WhySection() {
+  const items = [
+    { icon: SquareTerminal, title: "Consola interactiva", text: "O programa pede os dados e você escreve-os na própria consola." },
+    { icon: Bug, title: "Erros em português", text: "Cada erro vem explicado, e um toque leva-o à linha certa." },
+    { icon: Cloud, title: "Projectos na nuvem", text: "Gravação automática enquanto escreve, em qualquer aparelho." },
+    { icon: Maximize2, title: "Ecrã inteiro", text: "Só o código e a consola, sem distracções." },
+  ];
   return (
-    <section id="exemplos" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-28">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <SectionHead
-          kicker="03 / Exemplos"
-          title="Aprenda a partir de código que funciona."
-          sub={`${EXAMPLES.length} programas comentados em ${CATEGORIES.length} categorias — abra, execute e modifique.`}
-        />
-        <Button asChild variant="subtle">
-          <Link to="/playground">
-            <BookOpen /> Ver todos
-          </Link>
-        </Button>
-      </div>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {CATEGORIES.map((c) => (
-          <span key={c} className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-            {c} <span className="font-mono text-foreground">{EXAMPLES.filter((e) => e.category === c).length}</span>
-          </span>
-        ))}
-      </div>
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {list.map((ex) => (
-          <Link
-            key={ex.id}
-            to="/playground"
-            search={{ example: ex.id }}
-            className="group flex flex-col rounded-xl border border-border bg-card p-5 transition hover:-translate-y-0.5 hover:border-primary/50"
-          >
-            <span className="label-mono text-muted-foreground">{ex.category}</span>
-            <span className="mt-3 text-lg font-semibold tracking-tight">{ex.title}</span>
-            <span className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">{ex.description}</span>
-            <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-              <Play className="size-3.5 fill-current" /> Executar exemplo
-              <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" />
+    <section>
+      <SectionTitle title="Feito para programar no telemóvel" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {items.map(({ icon: Icon, title, text }) => (
+          <div key={title} className="rounded-[22px] bg-surface-1 p-4">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-primary-container text-on-primary-container">
+              <Icon className="size-5" />
             </span>
-          </Link>
+            <p className="mt-4 text-sm font-semibold leading-tight">{title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{text}</p>
+          </div>
         ))}
       </div>
     </section>
-  );
-}
-
-function FinalCta({ signedIn }: { signedIn: boolean }) {
-  return (
-    <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <div className="bg-grid relative overflow-hidden rounded-2xl border border-border bg-panel px-6 py-14 text-center sm:px-12 sm:py-20">
-        <div className="absolute left-1/2 top-0 -z-0 h-40 w-2/3 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
-        <div className="relative">
-          <p className="font-mono text-sm text-muted-foreground">
-            <span className="text-syn-keyword">static void</span> <span className="text-syn-fn">Main</span>() {"{"}
-          </p>
-          <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-semibold leading-[1.05] text-balance-tight sm:text-5xl">
-            O seu próximo programa começa aqui.
-          </h2>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button asChild variant="hero" size="xl">
-              <Link to="/playground">
-                <Play className="fill-current" /> Abrir o editor
-              </Link>
-            </Button>
-            {!signedIn && (
-              <Button asChild variant="subtle" size="xl">
-                <Link to="/auth">Criar conta</Link>
-              </Button>
-            )}
-          </div>
-          <p className="mt-4 font-mono text-sm text-muted-foreground">{"}"}</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:px-6">
-        <Logo />
-        <p className="sm:ml-4">Editor, compilador e execução de C# no navegador.</p>
-        <div className="space-y-1 font-mono text-xs sm:ml-auto sm:text-right">
-          <p>
-            Desenvolvido por: <span className="font-medium text-foreground">Pascoal André (Whizy Safary)</span>
-          </p>
-          <p>© {new Date().getFullYear()} C# Codex</p>
-        </div>
-      </div>
-    </footer>
   );
 }
